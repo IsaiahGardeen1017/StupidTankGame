@@ -12,7 +12,7 @@ appRoot.innerHTML = `
     <canvas class="game-canvas" aria-label="Three.js game viewport"></canvas>
     <div class="hud">
       <h1>Stupid Tank Game</h1>
-      <p>WASD to drive the prototype cube.</p>
+      <p>WASD to drive the spaceship.</p>
     </div>
   </div>
 `;
