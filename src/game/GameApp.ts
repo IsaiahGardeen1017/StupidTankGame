@@ -39,10 +39,6 @@ export class GameApp {
 
     private animationFrameId: number | null = null;
 
-    private readonly playerPosition = new Vector3(0, 0, 0);
-    private readonly playerVelocity = new Vector3();
-    private readonly forwardVector = new Vector3();
-
     private sim = new Simulation(this);
 
     constructor(canvas: HTMLCanvasElement) {
@@ -55,8 +51,6 @@ export class GameApp {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
         this.scene.background = new Color("#8ec9ff");
-
-        this.player = this.createPlayer();
 
         this.setupScene();
         this.handleResize();

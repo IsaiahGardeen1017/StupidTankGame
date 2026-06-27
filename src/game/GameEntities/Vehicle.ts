@@ -3,11 +3,13 @@ import { Vector2, Vector3 } from "three";
 export type HoverGroundVehicleStats = {
     repulserThrustNewtons: number;
     weightKg: number;
+    mesh: string; // Determines what STL file is used.
 };
 
 export const cloneTankStats: HoverGroundVehicleStats = {
     repulserThrustNewtons: 200_000,
     weightKg: 50_000,
+    mesh: "Spaceship",
 };
 
 export class HoverGroundVehicle {
