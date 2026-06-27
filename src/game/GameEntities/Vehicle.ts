@@ -3,12 +3,12 @@ import { Vector2, Vector3 } from "three";
 export type HoverGroundVehicleStats = {
     repulserThrustNewtons: number;
     weightKg: number;
-}
+};
 
-const cloneTankStats: HoverGroundVehicleStats = {
+export const cloneTankStats: HoverGroundVehicleStats = {
     repulserThrustNewtons: 200_000,
-    weightKg: 50_000
-}
+    weightKg: 50_000,
+};
 
 export class HoverGroundVehicle {
     stats: HoverGroundVehicleStats;
@@ -22,7 +22,11 @@ export class HoverGroundVehicle {
 
     private _position: Vector3;
 
-    constructor(name: string, stats: HoverGroundVehicleStats, position?: Vector3) {
+    constructor(
+        name: string,
+        stats: HoverGroundVehicleStats,
+        position?: Vector3,
+    ) {
         this.stats = stats;
         this.name = name;
         this._inputVector = new Vector2(0, 0);
@@ -43,10 +47,11 @@ export class HoverGroundVehicle {
         this._vehicleDirection = newDirection.clone().normalize();
     }
 
-
     simulateTick(tickLengthMs: number) {
         const dt = tickLengthMs / 1000;
-        const inputThrust2D = this._inputVector.clone().multiplyScalar(this.stats.repulserThrustNewtons);
+        const inputThrust2D = this._inputVector.clone().multiplyScalar(
+            this.stats.repulserThrustNewtons,
+        );
         const inputThrust3D = new Vector3(inputThrust2D.x, 0, inputThrust2D.y);
         const totalForces: Vector3 = inputThrust3D;
         const acceleration = totalForces.divideScalar(this.stats.weightKg);
@@ -54,6 +59,7 @@ export class HoverGroundVehicle {
         this._position.add(this._velocity.clone().multiplyScalar(dt));
     }
 
-
-
+    getPosition(): Vector3 {
+        return this._position;
+    }
 }

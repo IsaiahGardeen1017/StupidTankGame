@@ -20,35 +20,30 @@ import { InputController } from "./InputController";
 import spaceshipModelUrl from "../assets/Spaceship.stl?url";
 import { clamp, randInt } from "./utils";
 import { rgb, rgbFromColor } from "./utils_color";
+import { Simulation } from "./Simulation";
 
 const GROUND_SIZE = 1000;
 const HALF_GROUND_SIZE = GROUND_SIZE / 2;
-const PLAYER_SPEED = 95;
 const PLAYER_SIZE = 8;
 const CAMERA_OFFSET = new Vector3(0, 70, 90);
 
 export class GameApp {
     private readonly canvas: HTMLCanvasElement;
-
     private readonly renderer: WebGLRenderer;
-
     private readonly scene = new Scene();
 
     private readonly camera = new PerspectiveCamera(60, 1, 0.1, 2500);
-
     private readonly clock = new Clock();
-
-    private readonly input = new InputController();
-
+    readonly input = new InputController();
     private readonly player: Group;
 
     private animationFrameId: number | null = null;
 
     private readonly playerPosition = new Vector3(0, 0, 0);
-
     private readonly playerVelocity = new Vector3();
-
     private readonly forwardVector = new Vector3();
+
+    private sim = new Simulation(this);
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -96,7 +91,8 @@ export class GameApp {
     private readonly renderFrame = (): void => {
         const deltaTime = this.clock.getDelta();
 
-        this.updatePlayer(deltaTime);
+        this.sim.tick(deltaTime);
+
         this.updateCamera();
         this.renderer.render(this.scene, this.camera);
 
@@ -121,88 +117,13 @@ export class GameApp {
         this.scene.add(this.player);
 
         this.camera.position.copy(CAMERA_OFFSET);
-        this.camera.lookAt(this.playerPosition);
-    }
-
-    private createPlayer(): Group {
-        const playerRoot = new Group();
-        playerRoot.position.copy(this.playerPosition);
-
-        const loader = new STLLoader();
-        loader.load(
-            spaceshipModelUrl,
-            (geometry) => {
-                geometry.computeVertexNormals();
-                geometry.computeBoundingBox();
-
-                const bounds = geometry.boundingBox;
-
-                if (!bounds) {
-                    return;
-                }
-
-                const size = bounds.getSize(new Vector3());
-                const largestDimension = Math.max(size.x, size.y, size.z) || 1;
-                const modelScale = PLAYER_SIZE / largestDimension;
-
-                geometry.center();
-
-                const mesh = new Mesh(
-                    geometry,
-                    new MeshStandardMaterial({ color: "#6f7cff" }),
-                );
-
-                mesh.scale.setScalar(modelScale);
-                mesh.position.y = (size.y * modelScale) / 2;
-                mesh.rotation.x = -Math.PI / 2;
-                mesh.castShadow = false;
-                mesh.receiveShadow = false;
-
-                playerRoot.add(mesh);
-            },
-            undefined,
-            (error) => {
-                console.error("Failed to load spaceship STL model.", error);
-            },
-        );
-
-        return playerRoot;
-    }
-
-    private updatePlayer(deltaTime: number): void {
-        const { forward, right } = this.input.getMovementAxes();
-        this.playerVelocity.set(right, 0, forward);
-
-        if (this.playerVelocity.lengthSq() > 0) {
-            this.playerVelocity.normalize().multiplyScalar(
-                PLAYER_SPEED * deltaTime,
-            );
-            this.playerPosition.add(this.playerVelocity);
-
-            this.playerPosition.x = clamp(
-                this.playerPosition.x,
-                -HALF_GROUND_SIZE + PLAYER_SIZE / 2,
-                HALF_GROUND_SIZE - PLAYER_SIZE / 2,
-            );
-            this.playerPosition.z = clamp(
-                this.playerPosition.z,
-                -HALF_GROUND_SIZE + PLAYER_SIZE / 2,
-                HALF_GROUND_SIZE - PLAYER_SIZE / 2,
-            );
-
-            this.forwardVector.copy(this.playerVelocity).normalize();
-            this.player.rotation.y = Math.atan2(
-                this.forwardVector.x,
-                this.forwardVector.z,
-            );
-        }
-
-        this.player.position.copy(this.playerPosition);
+        this.camera.lookAt(this.sim.getPlayerVehilce().getPosition());
     }
 
     private updateCamera(): void {
-        this.camera.position.copy(this.playerPosition).add(CAMERA_OFFSET);
-        this.camera.lookAt(this.playerPosition);
+        const playerPosition = this.sim.getPlayerVehilce().getPosition();
+        this.camera.position.copy(playerPosition).add(CAMERA_OFFSET);
+        this.camera.lookAt(playerPosition);
     }
 }
 
