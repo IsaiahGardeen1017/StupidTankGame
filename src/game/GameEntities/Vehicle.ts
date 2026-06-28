@@ -1,15 +1,18 @@
 import { Vector2, Vector3 } from "three";
+import { newId } from "../idGenerator";
 
 export type HoverGroundVehicleStats = {
     repulserThrustNewtons: number;
     weightKg: number;
-    mesh: string; // Determines what STL file is used.
+    meshId: string; // Determines what STL file is used.
+    linearFrictionFactor: number;
 };
 
 export const cloneTankStats: HoverGroundVehicleStats = {
-    repulserThrustNewtons: 200_000,
+    repulserThrustNewtons: 1_000_000,
     weightKg: 50_000,
-    mesh: "Spaceship",
+    meshId: "Spaceship",
+    linearFrictionFactor: 10_000,
 };
 
 export class HoverGroundVehicle {
@@ -17,12 +20,9 @@ export class HoverGroundVehicle {
     name: string;
 
     private _inputVector: Vector2;
-
     private _velocity: Vector3;
-
-    private _vehicleDirection: Vector3;
-
     private _position: Vector3;
+    id: string;
 
     constructor(
         name: string,
@@ -33,32 +33,36 @@ export class HoverGroundVehicle {
         this.name = name;
         this._inputVector = new Vector2(0, 0);
         this._velocity = new Vector3(0, 0, 0);
-        this._vehicleDirection = new Vector3(1, 0, 0);
         this._position = position ? position : new Vector3(0, 0, 0);
+        this.id = newId();
     }
 
-    setInput(input: Vector2) {
+    setInput(input: Vector2): void {
         if (input.lengthSq() > 1) {
             this._inputVector = input.clone().normalize();
         } else {
-            this._inputVector = input;
+            this._inputVector = input.clone();
         }
     }
 
-    setDirection(newDirection: Vector3) {
-        this._vehicleDirection = newDirection.clone().normalize();
-    }
-
-    simulateTick(tickLengthMs: number) {
-        const dt = tickLengthMs / 1000;
+    simulateTick(deltaTimeSeconds: number): void {
         const inputThrust2D = this._inputVector.clone().multiplyScalar(
             this.stats.repulserThrustNewtons,
         );
         const inputThrust3D = new Vector3(inputThrust2D.x, 0, inputThrust2D.y);
-        const totalForces: Vector3 = inputThrust3D;
+        const frictionMagnitude = (this._velocity.length()) *
+            this.stats.linearFrictionFactor;
+        const frictionDirection = this._velocity.clone().normalize().negate();
+        const frictionVector = frictionDirection.multiplyScalar(
+            frictionMagnitude,
+        );
+        const totalForces: Vector3 = inputThrust3D.add(frictionVector);
         const acceleration = totalForces.divideScalar(this.stats.weightKg);
-        this._velocity.add(acceleration.multiplyScalar(dt));
-        this._position.add(this._velocity.clone().multiplyScalar(dt));
+        this._velocity.add(acceleration.multiplyScalar(deltaTimeSeconds));
+        this._position.add(
+            this._velocity.clone().multiplyScalar(deltaTimeSeconds),
+        );
+        console.log(this._velocity.length());
     }
 
     getPosition(): Vector3 {

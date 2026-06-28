@@ -17,10 +17,12 @@ export class InputController {
     }
 
     public getMovementAxes(): Vector2 {
-        const forward = Number(this.isPressed("KeyW")) -
-            Number(this.isPressed("KeyS"));
-        const lateral = Number(this.isPressed("KeyD")) -
-            Number(this.isPressed("KeyA"));
+        const w = Number(this.isPressed("KeyW"));
+        const a = Number(this.isPressed("KeyA"));
+        const s = Number(this.isPressed("KeyS"));
+        const d = Number(this.isPressed("KeyD"));
+        const forward = w - s;
+        const lateral = d - a;
 
         return new Vector2(forward, lateral);
     }
