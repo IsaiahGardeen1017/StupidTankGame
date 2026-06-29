@@ -2,6 +2,7 @@ import { Vector2, Vector3 } from "three";
 import { newId } from "../idGenerator";
 import { GlobalDebugScreen } from "../GlobalDebugScreen";
 import { calculateMomentOfIntertia } from "../utils";
+import type { Simulation } from "../Simulation";
 
 export type HoverGroundVehicleStats = {
     repulserThrustNewtons: number;
@@ -27,17 +28,18 @@ export class HoverGroundVehicle {
     stats: HoverGroundVehicleStats;
     name: string;
 
-    private _positionInputVector: Vector2;
-    private _yawInput: number;
-    private _velocity: Vector3;
-    private _position: Vector3;
-    private _direction: Vector3;
-    private _yawAngularVelocity: number;
+    protected _positionInputVector: Vector2;
+    protected _yawInput: number;
+    protected _velocity: Vector3;
+    protected _position: Vector3;
+    protected _direction: Vector3;
+    protected _yawAngularVelocity: number;
     id: string;
 
     constructor(
         name: string,
         stats: HoverGroundVehicleStats,
+        _sim: Simulation,
         position?: Vector3,
     ) {
         this.stats = stats;
@@ -88,9 +90,7 @@ export class HoverGroundVehicle {
         this._position.add(
             this._velocity.clone().multiplyScalar(deltaT),
         );
-        GlobalDebugScreen.show("input", this._positionInputVector);
-        GlobalDebugScreen.show("speed", this._velocity.length());
-        GlobalDebugScreen.show("position", this._position);
+        GlobalDebugScreen.show(`${this.id} position`, this._position);
 
         //Alter Rotation
         const rotationalAcceleration = this._yawInput *
@@ -103,13 +103,6 @@ export class HoverGroundVehicle {
         this._direction.applyAxisAngle(new Vector3(0, 1, 0), yawDelta)
             .setY(0)
             .normalize();
-        GlobalDebugScreen.show("direction", this._direction);
-        GlobalDebugScreen.show("rotationFriction", rotationFriction);
-        GlobalDebugScreen.show(
-            "rotationalAcceleration",
-            rotationalAcceleration,
-        );
-        GlobalDebugScreen.show("yawSpeed", this._yawAngularVelocity);
     }
 
     getPosition(): Vector3 {

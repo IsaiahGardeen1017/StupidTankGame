@@ -35,7 +35,7 @@ export class ThreeJsEngine {
     private readonly renderer: WebGLRenderer;
     private readonly scene = new Scene();
     private readonly cam = new PerspectiveCamera(60, 1, 0.1, 2500);
-    private readonly playerGroup: Group;
+    private readonly entityGroups = new Map<string, Group>();
 
     constructor(canvas: HTMLCanvasElement, sim: Simulation) {
         this.canvas = canvas;
@@ -45,26 +45,25 @@ export class ThreeJsEngine {
             canvas: this.canvas,
         });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        this.playerGroup = this.createPlayer();
+        this.getOrCreateEntityGroup(this.sim.getPlayerVehicle());
         this.setupScene();
     }
 
-    private createPlayer(): Group {
-        const simmedPlayer = this.sim.getPlayerVehicle();
-        const playerRoot = new Group();
-        const meshDetails = Meshes[simmedPlayer.stats.meshId];
+    private createVehicleGroup(vehicle: HoverGroundVehicle): Group {
+        const vehicleRoot = new Group();
+        const meshDetails = Meshes[vehicle.stats.meshId];
 
         if (!meshDetails) {
             console.error(
-                `No mesh metadata found for meshId "${simmedPlayer.stats.meshId}".`,
+                `No mesh metadata found for meshId "${vehicle.stats.meshId}".`,
             );
-            return playerRoot;
+            return vehicleRoot;
         }
 
         const loader = new STLLoader();
 
         loader.load(
-            this.getMeshUrl(simmedPlayer),
+            this.getMeshUrl(vehicle),
             (geometry) => {
                 geometry.computeVertexNormals();
                 geometry.center();
@@ -89,18 +88,42 @@ export class ThreeJsEngine {
                 const scaledBounds = new Box3().setFromObject(flatspinRoot);
                 flatspinRoot.position.y = -scaledBounds.min.y;
 
-                playerRoot.add(flatspinRoot);
+                vehicleRoot.add(flatspinRoot);
             },
             undefined,
             (error) => {
                 console.error(
-                    `Failed to load STL model "${meshDetails.stlFileName}".`,
+                    `Failed to load STL model "${meshDetails.stlUrl}".`,
                     error,
                 );
             },
         );
 
-        return playerRoot;
+        return vehicleRoot;
+    }
+
+    private getOrCreateEntityGroup(vehicle: HoverGroundVehicle): Group {
+        const existingGroup = this.entityGroups.get(vehicle.id);
+
+        if (existingGroup) {
+            return existingGroup;
+        }
+
+        const newGroup = this.createVehicleGroup(vehicle);
+        this.entityGroups.set(vehicle.id, newGroup);
+        return newGroup;
+    }
+
+    private syncEntityGroups(): void {
+        const entities = this.sim.getEntityList();
+
+        for (let i = 0; i < entities.length; i += 1) {
+            const entityGroup = this.getOrCreateEntityGroup(entities[i]);
+
+            if (entityGroup.parent !== this.scene) {
+                this.scene.add(entityGroup);
+            }
+        }
     }
 
     private getMeshUrl(vehicle: HoverGroundVehicle): string {
@@ -112,7 +135,7 @@ export class ThreeJsEngine {
             );
         }
 
-        return `/assets/${meshDetails.stlFileName}`;
+        return meshDetails.stlUrl;
     }
 
     private setupScene(): void {
@@ -131,7 +154,7 @@ export class ThreeJsEngine {
         ground.rotation.x = -Math.PI / 2;
         this.scene.add(ground);
 
-        this.scene.add(this.playerGroup);
+        this.syncEntityGroups();
 
         const playerPosition = this.sim.getPlayerVehicle().getPosition();
         const playerDirection = this.sim.getPlayerVehicle().getDirection()
@@ -157,19 +180,33 @@ export class ThreeJsEngine {
     }
 
     render(): void {
+        this.syncEntityGroups();
+
+        const entities = this.sim.getEntityList();
+
+        for (let i = 0; i < entities.length; i += 1) {
+            const entity = entities[i];
+            const entityGroup = this.getOrCreateEntityGroup(entity);
+            const entityPosition = entity.getPosition().clone().add(
+                new Vector3(0, 2, 0),
+            );
+            const entityDirection = entity.getDirection();
+
+            entityGroup.position.copy(entityPosition);
+
+            if (entityDirection.lengthSq() > MIN_DIRECTION_LENGTH_SQUARED) {
+                entityGroup.rotation.y = Math.atan2(
+                    entityDirection.x,
+                    entityDirection.z,
+                );
+            }
+        }
+
         const playerVehicle = this.sim.getPlayerVehicle();
         const playerPosition = playerVehicle.getPosition().clone().add(
             new Vector3(0, 2, 0),
         );
         const playerDirection = playerVehicle.getDirection();
-        this.playerGroup.position.copy(playerPosition);
-
-        if (playerDirection.lengthSq() > MIN_DIRECTION_LENGTH_SQUARED) {
-            this.playerGroup.rotation.y = Math.atan2(
-                playerDirection.x,
-                playerDirection.z,
-            );
-        }
 
         const cameraOffset = playerDirection.clone().setY(0).normalize()
             .multiplyScalar(CAMERA_FOLLOW_DISTANCE);
