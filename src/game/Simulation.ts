@@ -13,8 +13,8 @@ export class Simulation {
         this.playerVehicle.simulateTick(deltaT);
     }
 
-    setPlayerInput(input: Vector2): void {
-        this.playerVehicle.setInput(new Vector2(input.y, input.x));
+    setPlayerInput(input: Vector2, yawInput: number): void {
+        this.playerVehicle.setInput(new Vector2(input.y, input.x), yawInput);
     }
 
     getPlayerVehicle(): HoverGroundVehicle {

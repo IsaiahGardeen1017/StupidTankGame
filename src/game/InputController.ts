@@ -1,9 +1,14 @@
 import { Vector2 } from "three";
+import { GlobalDebugScreen } from "./GlobalDebugScreen";
 
 export class InputController {
     private readonly pressedKeys = new Set<string>();
 
     private readonly onKeyDown = (event: KeyboardEvent): void => {
+        if (event.code === "KeyY" && !event.repeat) {
+            GlobalDebugScreen.toggle();
+        }
+
         this.pressedKeys.add(event.code);
     };
 
@@ -25,6 +30,13 @@ export class InputController {
         const lateral = d - a;
 
         return new Vector2(forward, lateral);
+    }
+
+    public getRotationAxes(): number {
+        const q = Number(this.isPressed("KeyQ"));
+        const e = Number(this.isPressed("KeyE"));
+        const rotation = q - e;
+        return rotation;
     }
 
     public dispose(): void {

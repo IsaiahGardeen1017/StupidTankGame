@@ -66,3 +66,30 @@ body {
   margin-top: 0.35rem;
   color: rgba(232, 242, 232, 0.8);
 }
+
+.debug-panel {
+  top: 1.25rem;
+  left: auto;
+  right: 1.25rem;
+  min-width: 20rem;
+  max-width: min(28rem, calc(100vw - 2.5rem));
+}
+
+.debug-panel-hidden {
+  display: none;
+}
+
+.debug-panel h2 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.debug-panel-content {
+  margin: 0.75rem 0 0;
+  color: rgba(232, 242, 232, 0.88);
+  font: 0.9rem/1.5 "Consolas", "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: pre-wrap;
+}

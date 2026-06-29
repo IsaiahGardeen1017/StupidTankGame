@@ -1,5 +1,6 @@
 import {
     AmbientLight,
+    Box3,
     Color,
     DataTexture,
     DirectionalLight,
@@ -14,6 +15,7 @@ import {
     Vector3,
     WebGLRenderer,
 } from "three";
+import { Meshes } from "./assets";
 import type { HoverGroundVehicle } from "./GameEntities/Vehicle";
 import type { Simulation } from "./Simulation";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
@@ -22,8 +24,10 @@ import { rgb, rgbFromColor } from "./utils_color";
 
 export type RenderableEntitiy = HoverGroundVehicle;
 
-const CAMERA_OFFSET = new Vector3(0, 10, 30);
+const CAMERA_FOLLOW_DISTANCE = 30;
+const CAMERA_FOLLOW_HEIGHT = 10;
 const GROUND_SIZE = 1000;
+const MIN_DIRECTION_LENGTH_SQUARED = 0.0001;
 
 export class ThreeJsEngine {
     private readonly canvas: HTMLCanvasElement;
@@ -48,6 +52,14 @@ export class ThreeJsEngine {
     private createPlayer(): Group {
         const simmedPlayer = this.sim.getPlayerVehicle();
         const playerRoot = new Group();
+        const meshDetails = Meshes[simmedPlayer.stats.meshId];
+
+        if (!meshDetails) {
+            console.error(
+                `No mesh metadata found for meshId "${simmedPlayer.stats.meshId}".`,
+            );
+            return playerRoot;
+        }
 
         const loader = new STLLoader();
 
@@ -55,34 +67,36 @@ export class ThreeJsEngine {
             this.getMeshUrl(simmedPlayer),
             (geometry) => {
                 geometry.computeVertexNormals();
-                geometry.computeBoundingBox();
-
-                const bounds = geometry.boundingBox;
-
-                if (!bounds) {
-                    return;
-                }
-
-                const size = bounds.getSize(new Vector3());
-                const largestDimension = Math.max(size.x, size.y, size.z) || 1;
-                const modelScale = 8 / largestDimension;
-
                 geometry.center();
 
                 const mesh = new Mesh(
                     geometry,
                     new MeshStandardMaterial({ color: "#85c0ea" }),
                 );
+                const flatspinRoot = new Group();
 
-                mesh.scale.setScalar(modelScale);
-                mesh.position.y = (size.y * modelScale) / 2;
                 mesh.rotation.x = -Math.PI / 2;
+                flatspinRoot.rotation.y = meshDetails.flatspinOffset;
+                flatspinRoot.add(mesh);
 
-                playerRoot.add(mesh);
+                const unscaledBounds = new Box3().setFromObject(flatspinRoot);
+                const unscaledSize = unscaledBounds.getSize(new Vector3());
+                const frontToBackLength = Math.max(unscaledSize.z, 0.0001);
+                const modelScale = meshDetails.length / frontToBackLength;
+
+                flatspinRoot.scale.setScalar(modelScale);
+
+                const scaledBounds = new Box3().setFromObject(flatspinRoot);
+                flatspinRoot.position.y = -scaledBounds.min.y;
+
+                playerRoot.add(flatspinRoot);
             },
             undefined,
             (error) => {
-                console.error("Failed to load spaceship STL model.", error);
+                console.error(
+                    `Failed to load STL model "${meshDetails.stlFileName}".`,
+                    error,
+                );
             },
         );
 
@@ -90,7 +104,15 @@ export class ThreeJsEngine {
     }
 
     private getMeshUrl(vehicle: HoverGroundVehicle): string {
-        return `/assets/${vehicle.stats.meshId}.stl`;
+        const meshDetails = Meshes[vehicle.stats.meshId];
+
+        if (!meshDetails) {
+            throw new Error(
+                `No mesh metadata found for meshId "${vehicle.stats.meshId}".`,
+            );
+        }
+
+        return `/assets/${meshDetails.stlFileName}`;
     }
 
     private setupScene(): void {
@@ -111,8 +133,18 @@ export class ThreeJsEngine {
 
         this.scene.add(this.playerGroup);
 
-        this.cam.position.copy(CAMERA_OFFSET);
-        this.cam.lookAt(this.sim.getPlayerVehicle().getPosition());
+        const playerPosition = this.sim.getPlayerVehicle().getPosition();
+        const playerDirection = this.sim.getPlayerVehicle().getDirection()
+            .clone()
+            .setY(0)
+            .normalize();
+        const cameraOffset = playerDirection.multiplyScalar(
+            CAMERA_FOLLOW_DISTANCE,
+        );
+        cameraOffset.y = CAMERA_FOLLOW_HEIGHT;
+
+        this.cam.position.copy(playerPosition).add(cameraOffset);
+        this.cam.lookAt(playerPosition);
     }
 
     handleResize(): void {
@@ -129,9 +161,21 @@ export class ThreeJsEngine {
         const playerPosition = playerVehicle.getPosition().clone().add(
             new Vector3(0, 2, 0),
         );
+        const playerDirection = playerVehicle.getDirection();
         this.playerGroup.position.copy(playerPosition);
 
-        this.cam.position.copy(playerPosition).add(CAMERA_OFFSET);
+        if (playerDirection.lengthSq() > MIN_DIRECTION_LENGTH_SQUARED) {
+            this.playerGroup.rotation.y = Math.atan2(
+                playerDirection.x,
+                playerDirection.z,
+            );
+        }
+
+        const cameraOffset = playerDirection.clone().setY(0).normalize()
+            .multiplyScalar(CAMERA_FOLLOW_DISTANCE);
+        cameraOffset.y = CAMERA_FOLLOW_HEIGHT;
+
+        this.cam.position.copy(playerPosition).add(cameraOffset);
         this.cam.lookAt(playerPosition);
         this.renderer.render(this.scene, this.cam);
     }

@@ -1,5 +1,6 @@
 import './style.css';
 import { GameApp } from './game/GameApp';
+import { GlobalDebugScreen } from './game/GlobalDebugScreen';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -18,10 +19,17 @@ appRoot.innerHTML = `
 `;
 
 const canvas = appRoot.querySelector<HTMLCanvasElement>('.game-canvas');
+const gameShell = appRoot.querySelector<HTMLDivElement>('.game-shell');
 
 if (!canvas) {
   throw new Error('Game canvas element was not found.');
 }
+
+if (!gameShell) {
+  throw new Error('Game shell element was not found.');
+}
+
+GlobalDebugScreen.initialize(gameShell);
 
 const game = new GameApp(canvas);
 game.start();

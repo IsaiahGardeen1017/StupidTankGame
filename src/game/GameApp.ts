@@ -40,7 +40,10 @@ export class GameApp {
     private readonly renderFrame = (): void => {
         const deltaTime = this.clock.getDelta();
 
-        this.sim.setPlayerInput(this.input.getMovementAxes());
+        this.sim.setPlayerInput(
+            this.input.getMovementAxes(),
+            this.input.getRotationAxes(),
+        );
         this.sim.tick(deltaTime);
         this.threeEngine.render();
 

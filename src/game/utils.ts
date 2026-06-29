@@ -1,3 +1,5 @@
+import { Meshes } from "./assets";
+
 export function clamp(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max);
 }
@@ -9,4 +11,23 @@ export function randInt(minOrMax: number, max?: number): number {
     const upperBound = max === undefined ? minOrMax : max;
 
     return Math.floor(Math.random() * (upperBound - min + 1)) + min;
+}
+
+export function calculateMomentOfIntertia(
+    meshId: string,
+    weightKg: number,
+): number {
+    const meshDetails = Meshes[meshId];
+
+    if (!meshDetails) {
+        throw new Error(`No mesh metadata found for meshId "${meshId}".`);
+    }
+
+    const length = Math.max(meshDetails.length, 0);
+    const width = length / 2;
+    const massKg = Math.max(weightKg, 0);
+
+    // Approximate the vehicle as a rectangular body rotating around its center
+    // on the ground-plane up axis.
+    return (massKg * ((length * length) + (width * width))) / 12;
 }
