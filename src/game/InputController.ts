@@ -39,6 +39,10 @@ export class InputController {
         return rotation;
     }
 
+    public isPrimaryFirePressed(): boolean {
+        return this.isPressed("Space");
+    }
+
     public dispose(): void {
         window.removeEventListener("keydown", this.onKeyDown);
         window.removeEventListener("keyup", this.onKeyUp);

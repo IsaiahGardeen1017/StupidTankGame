@@ -3,6 +3,7 @@ import { newId } from "../idGenerator";
 import { GlobalDebugScreen } from "../GlobalDebugScreen";
 import { calculateMomentOfIntertia } from "../utils";
 import type { Simulation } from "../Simulation";
+import type { ProjectileHit, ProjectileTypeId } from "../Projectiles";
 
 export type HoverGroundVehicleStats = {
     repulserThrustNewtons: number;
@@ -12,6 +13,10 @@ export type HoverGroundVehicleStats = {
     momentOfInertia: number;
     yawTorqueNewtonMeters: number;
     yawFriction: number;
+    collisionRadius: number;
+    maxHealth: number;
+    primaryWeaponTypeId?: ProjectileTypeId;
+    primaryWeaponCooldownSeconds?: number;
 };
 
 export const cloneTankStats: HoverGroundVehicleStats = {
@@ -22,6 +27,10 @@ export const cloneTankStats: HoverGroundVehicleStats = {
     momentOfInertia: calculateMomentOfIntertia("clone-tank", 50_000),
     yawTorqueNewtonMeters: 2_000_000,
     yawFriction: 1_000_000,
+    collisionRadius: 4,
+    maxHealth: 100,
+    primaryWeaponTypeId: "blaster",
+    primaryWeaponCooldownSeconds: 0.12,
 };
 
 export class HoverGroundVehicle {
@@ -34,26 +43,34 @@ export class HoverGroundVehicle {
     protected _position: Vector3;
     protected _direction: Vector3;
     protected _yawAngularVelocity: number;
+    protected readonly _sim: Simulation;
+    protected _health: number;
+    private _isPrimaryFireRequested: boolean;
+    private _primaryWeaponCooldownRemaining: number;
     id: string;
 
     constructor(
         name: string,
         stats: HoverGroundVehicleStats,
-        _sim: Simulation,
+        sim: Simulation,
         position?: Vector3,
     ) {
         this.stats = stats;
         this.name = name;
+        this._sim = sim;
         this._positionInputVector = new Vector2(0, 0);
         this._velocity = new Vector3(0, 0, 0);
         this._yawInput = 0;
         this._yawAngularVelocity = 0;
         this._position = position ? position : new Vector3(0, 0, 0);
         this._direction = new Vector3(0, 0, 1);
+        this._health = stats.maxHealth;
+        this._isPrimaryFireRequested = false;
+        this._primaryWeaponCooldownRemaining = 0;
         this.id = newId();
     }
 
-    setInput(movementVector: Vector2, yawInput: number): void {
+    setInput(movementVector: Vector2, yawInput: number, isPrimaryFire = false): void {
         if (movementVector.lengthSq() > 1) {
             this._positionInputVector = movementVector.clone().normalize();
         } else {
@@ -62,9 +79,19 @@ export class HoverGroundVehicle {
 
         const rotationVal = yawInput < -1 ? -1 : (yawInput > 1 ? 1 : yawInput);
         this._yawInput = rotationVal;
+        this._isPrimaryFireRequested = isPrimaryFire;
     }
 
     simulateTick(deltaT: number): void {
+        if (this.isDestroyed()) {
+            return;
+        }
+
+        this._primaryWeaponCooldownRemaining = Math.max(
+            0,
+            this._primaryWeaponCooldownRemaining - deltaT,
+        );
+
         //Calculate Forces
         const forwardDirection = this._direction.clone().setY(0).normalize();
         const rightDirection = new Vector3().crossVectors(
@@ -103,6 +130,10 @@ export class HoverGroundVehicle {
         this._direction.applyAxisAngle(new Vector3(0, 1, 0), yawDelta)
             .setY(0)
             .normalize();
+
+        if (this._isPrimaryFireRequested) {
+            this.tryFirePrimary();
+        }
     }
 
     getPosition(): Vector3 {
@@ -111,5 +142,43 @@ export class HoverGroundVehicle {
 
     getDirection(): Vector3 {
         return this._direction;
+    }
+
+    getCollisionRadius(): number {
+        return this.stats.collisionRadius;
+    }
+
+    isDestroyed(): boolean {
+        return this._health <= 0;
+    }
+
+    protected tryFirePrimary(): boolean {
+        const typeId = this.stats.primaryWeaponTypeId;
+
+        if (!typeId || this._primaryWeaponCooldownRemaining > 0) {
+            return false;
+        }
+
+        const shotDirection = this._direction.clone().setY(0).normalize().negate();
+        const muzzlePosition = this._position.clone().add(
+            shotDirection.clone().multiplyScalar(this.stats.collisionRadius + 0.9),
+        );
+        muzzlePosition.y = Math.max(muzzlePosition.y, 1.5);
+
+        this._sim.registerProjectile({
+            typeId,
+            ownerId: this.id,
+            position: muzzlePosition,
+            direction: shotDirection,
+            inheritedVelocity: this._velocity,
+        });
+        this._primaryWeaponCooldownRemaining =
+            this.stats.primaryWeaponCooldownSeconds ?? 0;
+
+        return true;
+    }
+
+    takeDamage(hit: ProjectileHit): void {
+        this._health = Math.max(0, this._health - hit.damage);
     }
 }

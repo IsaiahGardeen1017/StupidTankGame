@@ -43,6 +43,7 @@ export class GameApp {
         this.sim.setPlayerInput(
             this.input.getMovementAxes(),
             this.input.getRotationAxes(),
+            this.input.isPrimaryFirePressed(),
         );
         this.sim.tick(deltaTime);
         this.threeEngine.render();
