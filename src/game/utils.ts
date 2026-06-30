@@ -1,4 +1,4 @@
-import { Meshes } from "./assets";
+import { Meshes } from "./presets/assets";
 import { Vector2 } from "three";
 
 export function clamp(value: number, min: number, max: number): number {

@@ -1,9 +1,9 @@
 import { Color, Vector3 } from "three";
 import { newId } from "./idGenerator";
 
-export type ProjectileTypeId = "blaster" | "mass-driver";
+export type ProjectileId = "20mmBlueBlaster";
 
-export type ProjectileTypeDef = {
+export type ProjectileStats = {
     damage: number;
     lifeSeconds: number;
     radius: number;
@@ -12,28 +12,20 @@ export type ProjectileTypeDef = {
     renderRadius: number;
 };
 
-export const ProjectileTypeDefs: Record<ProjectileTypeId, ProjectileTypeDef> = {
-    "blaster": {
+export const ProjectileTypeDefs: Record<ProjectileId, ProjectileStats> = {
+    "20mmBlueBlaster": {
         damage: 25,
         lifeSeconds: 3.0,
-        radius: 0.5,
+        radius: 0.35,
         muzzleVelocity: 500,
         renderColor: "#00d5ff",
-        renderRadius: 0.5,
-    },
-    "mass-driver": {
-        damage: 100,
-        lifeSeconds: 2.5,
-        radius: 1.1,
-        muzzleVelocity: 320,
-        renderColor: "#dce4ef",
-        renderRadius: 0.22,
+        renderRadius: 0.35,
     },
 };
 
 export type ProjectileState = {
     id: string;
-    typeId: ProjectileTypeId;
+    typeId: ProjectileId;
     ownerId: string;
     position: Vector3;
     previousPosition: Vector3;
@@ -42,7 +34,7 @@ export type ProjectileState = {
 };
 
 export type ProjectileSpawnParams = {
-    typeId: ProjectileTypeId;
+    typeId: ProjectileId;
     ownerId: string;
     position: Vector3;
     direction: Vector3;
@@ -51,7 +43,7 @@ export type ProjectileSpawnParams = {
 
 export type ProjectileHit = {
     projectileId: string;
-    projectileTypeId: ProjectileTypeId;
+    projectileTypeId: ProjectileId;
     shooterId: string;
     damage: number;
 };
@@ -76,6 +68,6 @@ export function createProjectile(
     };
 }
 
-export function getProjectileColor(typeId: ProjectileTypeId): Color {
+export function getProjectileColor(typeId: ProjectileId): Color {
     return new Color(ProjectileTypeDefs[typeId].renderColor);
 }

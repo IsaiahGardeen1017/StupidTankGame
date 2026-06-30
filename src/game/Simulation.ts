@@ -4,8 +4,8 @@ import { AiFreigher } from "./GameEntities/AiFreighter";
 import {
     createProjectile,
     type ProjectileSpawnParams,
-    ProjectileTypeDefs,
     type ProjectileState,
+    ProjectileTypeDefs,
 } from "./Projectiles";
 import { distanceSqFromPointToSegment2D, randInt } from "./utils";
 
@@ -15,6 +15,7 @@ export class Simulation {
     size: number;
 
     aiVehicles: HoverGroundVehicle[];
+    elapsedTime: number;
     private readonly projectiles: ProjectileState[];
 
     constructor(size: number = 1000) {
@@ -27,6 +28,7 @@ export class Simulation {
         this.size = size;
         this.aiVehicles = [];
         this.projectiles = [];
+        this.elapsedTime = 0;
 
         for (let i = 0; i < 10; i++) {
             this.aiVehicles.push(
@@ -39,15 +41,20 @@ export class Simulation {
     }
 
     tick(deltaT: number): void {
-        this.playerVehicle.simulateTick(deltaT);
+        this.elapsedTime += deltaT;
+        this.playerVehicle.simulateTick(deltaT, this.elapsedTime);
         for (let i = 0; i < this.aiVehicles.length; i++) {
-            this.aiVehicles[i].simulateTick(deltaT);
+            this.aiVehicles[i].simulateTick(deltaT, this.elapsedTime);
         }
 
         this.tickProjectiles(deltaT);
     }
 
-    setPlayerInput(input: Vector2, yawInput: number, isPrimaryFire: boolean): void {
+    setPlayerInput(
+        input: Vector2,
+        yawInput: number,
+        isPrimaryFire: boolean,
+    ): void {
         this.playerVehicle.setInput(
             new Vector2(input.y, input.x),
             yawInput,
@@ -123,7 +130,10 @@ export class Simulation {
             }
 
             const vehiclePosition = vehicle.getPosition();
-            const vehicleCenter = new Vector2(vehiclePosition.x, vehiclePosition.z);
+            const vehicleCenter = new Vector2(
+                vehiclePosition.x,
+                vehiclePosition.z,
+            );
             const hitRadius = projectileRadius + vehicle.getCollisionRadius();
             const distanceSq = distanceSqFromPointToSegment2D(
                 vehicleCenter,

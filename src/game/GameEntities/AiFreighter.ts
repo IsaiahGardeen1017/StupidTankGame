@@ -5,15 +5,16 @@ import { calculateMomentOfIntertia, randInt } from "../utils";
 import { HoverGroundVehicle, type HoverGroundVehicleStats } from "./Vehicle";
 
 export const freighterStats: HoverGroundVehicleStats = {
-    repulserThrustNewtons: 500_000,
-    weightKg: 150_000,
+    repulserThrustNewtons: 500000,
+    weightKg: 150000,
     meshId: "freighter",
-    linearFrictionFactor: 15_000,
-    momentOfInertia: calculateMomentOfIntertia("freighter", 150_000),
-    yawTorqueNewtonMeters: 2_000_000,
-    yawFriction: 1_000_000,
+    linearFrictionFactor: 15000,
+    momentOfInertia: calculateMomentOfIntertia("freighter", 150000),
+    yawTorqueNewtonMeters: 2000000,
+    yawFriction: 1000000,
     collisionRadius: 7.5,
     maxHealth: 25,
+    primaryWeaponTypeId: "20mmBlueBlaster",
 };
 
 export class AiFreigher extends HoverGroundVehicle {
@@ -25,9 +26,13 @@ export class AiFreigher extends HoverGroundVehicle {
         this._positionInputVector = new Vector2(Math.random(), Math.random());
     }
 
-    setInput(_movementVector: Vector2, _yawInput: number, _isPrimaryFire = false): void {}
+    setInput(
+        _movementVector: Vector2,
+        _yawInput: number,
+        _isPrimaryFire = false,
+    ): void {}
 
-    simulateTick(deltaT: number) {
+    simulateTick(deltaT: number, elapsedTime: number) {
         if (this.isDead) {
             return;
         }
@@ -38,7 +43,7 @@ export class AiFreigher extends HoverGroundVehicle {
             );
         }
         this.tickNum += 1;
-        super.simulateTick(deltaT);
+        super.simulateTick(deltaT, elapsedTime);
     }
 
     takeDamage(hit: ProjectileHit) {

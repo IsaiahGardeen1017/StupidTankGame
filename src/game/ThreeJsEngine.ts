@@ -16,7 +16,7 @@ import {
     Vector3,
     WebGLRenderer,
 } from "three";
-import { Meshes } from "./assets";
+import { Meshes } from "./presets/assets";
 import type { HoverGroundVehicle } from "./GameEntities/Vehicle";
 import type { Simulation } from "./Simulation";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
@@ -123,7 +123,7 @@ export class ThreeJsEngine {
             undefined,
             (error) => {
                 console.error(
-                    `Failed to load STL model "${meshDetails.stlUrl}".`,
+                    `Failed to load STL model "${meshDetails.stlFileName}".`,
                     error,
                 );
             },
@@ -164,7 +164,7 @@ export class ThreeJsEngine {
         const projectileMaterial = new MeshStandardMaterial({
             color: projectileColor,
             emissive: projectileColor,
-            emissiveIntensity: projectile.typeId === "blaster" ? 1.5 : 1,
+            emissiveIntensity: 1.5,
             roughness: 0.2,
             metalness: 0,
         });
@@ -244,7 +244,7 @@ export class ThreeJsEngine {
             );
         }
 
-        return meshDetails.stlUrl;
+        return `/src/assets/${meshDetails.stlFileName}`;
     }
     private setupScene(): void {
         this.scene.background = new Color("#8ec9ff");
