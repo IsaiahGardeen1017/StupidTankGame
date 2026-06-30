@@ -1,10 +1,11 @@
 import type { ProjectileId } from "../Projectiles";
+import type { SoundId } from "./sounds";
 
 export type BlasterStats = {
     name: string;
     shootCooldown: number;
     projectile: ProjectileId;
-    sound: string;
+    sound: SoundId;
 };
 
 export type BlasterIds = "20mmBlueBlaster";
@@ -14,6 +15,6 @@ export const BLASTERS: Record<BlasterIds, BlasterStats> = {
         name: "20 mm Blaster",
         shootCooldown: 100,
         projectile: "20mmBlueBlaster",
-        sound: "FIRESPRAY_CANNON.wav",
+        sound: "DEATHTROOPER_RIFLE",
     },
 };

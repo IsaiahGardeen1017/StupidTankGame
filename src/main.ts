@@ -1,4 +1,5 @@
 import './style.css';
+import { AudioManager } from './game/AudioManager';
 import { GameApp } from './game/GameApp';
 import { GlobalDebugScreen } from './game/GlobalDebugScreen';
 
@@ -30,6 +31,7 @@ if (!gameShell) {
 }
 
 GlobalDebugScreen.initialize(gameShell);
+void AudioManager.initialize();
 
 const game = new GameApp(canvas);
 game.start();

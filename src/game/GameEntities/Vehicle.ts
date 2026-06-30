@@ -1,9 +1,10 @@
 import { Vector2, Vector3 } from "three";
+import { AudioManager } from "../AudioManager";
 import { newId } from "../idGenerator";
 import { GlobalDebugScreen } from "../GlobalDebugScreen";
 import { calculateMomentOfIntertia } from "../utils";
 import type { Simulation } from "../Simulation";
-import type { ProjectileHit, ProjectileId } from "../Projectiles";
+import type { ProjectileHit } from "../Projectiles";
 import { type BlasterIds, BLASTERS } from "../presets/blasters";
 
 export type HoverGroundVehicleStats = {
@@ -46,7 +47,6 @@ export class HoverGroundVehicle {
     protected _health: number;
     private _isPrimaryFireRequested: boolean;
     private _lastShot = -1000;
-    private _numShots = 0;
     id: string;
 
     constructor(
@@ -185,6 +185,10 @@ export class HoverGroundVehicle {
             position: muzzlePosition,
             direction: shotDirection,
             inheritedVelocity: this._velocity,
+        });
+        void AudioManager.playSound(BLASTERS[weaponTypeId].sound, {
+            volume: 0.55,
+            playbackRateJitter: 0.04,
         });
         this._lastShot = elapsedTime;
 
