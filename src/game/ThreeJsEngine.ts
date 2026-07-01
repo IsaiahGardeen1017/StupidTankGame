@@ -247,7 +247,7 @@ export class ThreeJsEngine {
             );
         }
 
-        return `/src/assets/${meshDetails.stlFileName}`;
+        return `${import.meta.env.BASE_URL}assets/${meshDetails.stlFileName}`;
     }
     private setupScene(): void {
         this.scene.background = new Color("#8ec9ff");
