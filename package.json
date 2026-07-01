@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "dev": "npm run sync:public-assets && vite",
+    "build": "npm run sync:public-assets && tsc && vite build",
+    "preview": "vite preview",
+    "sync:public-assets": "node scripts/copy-stl-assets.mjs"
   },
   "devDependencies": {
     "@types/three": "^0.184.1",
