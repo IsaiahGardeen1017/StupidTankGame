@@ -1,0 +1,64 @@
+name: Delete branch preview
+
+on:
+  delete:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: branch-pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  delete:
+    name: Remove deleted branch preview
+    if: github.event.ref_type == 'branch' && github.event.ref != 'gh-pages'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@v4
+
+      - name: Compute preview path
+        id: preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          slug="$(printf '%s' "${{ github.event.ref }}" | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9._-]+#-#g; s#^-+##; s#-+$##')"
+          if [ -z "$slug" ]; then
+            slug="branch"
+          fi
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+
+      - name: Delete preview from gh-pages
+        shell: bash
+        env:
+          PREVIEW_SLUG: ${{ steps.preview.outputs.slug }}
+        run: |
+          set -euo pipefail
+
+          if ! git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            echo "No gh-pages branch exists; nothing to delete."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          pages_dir="$(mktemp -d)"
+          git fetch --depth=1 origin gh-pages
+          git worktree add --detach "$pages_dir" FETCH_HEAD
+          git -C "$pages_dir" switch -C gh-pages
+
+          rm -rf "$pages_dir/$PREVIEW_SLUG"
+          node .github/scripts/render-pages-index.mjs "$pages_dir"
+
+          git -C "$pages_dir" add .
+          if git -C "$pages_dir" diff --cached --quiet; then
+            echo "No Pages changes to publish."
+            exit 0
+          fi
+
+          git -C "$pages_dir" commit -m "Delete preview for ${{ github.event.ref }}"
+          git -C "$pages_dir" push origin gh-pages

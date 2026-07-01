@@ -35,5 +35,5 @@ GlobalDebugScreen.initialize(gameShell);
 GlobalOptionsPanel.initialize(gameShell);
 void AudioManager.initialize();
 
-const game = new GameApp(canvas);
+const game = new GameApp(canvas, gameShell);
 game.start();

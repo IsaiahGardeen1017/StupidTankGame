@@ -14,7 +14,7 @@ export const freighterStats: HoverGroundVehicleStats = {
     yawFriction: 1000000,
     collisionRadius: 7.5,
     deathEffectId: "vehicleDeathExplosion",
-    maxHealth: 25,
+    maxHealth: 10,
     primaryWeaponTypeId: "20mmBlueBlaster",
 };
 
