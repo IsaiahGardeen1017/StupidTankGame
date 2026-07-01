@@ -1,4 +1,5 @@
 import { Vector2, Vector3 } from "three";
+import type { VisualEffectSpawnEvent } from "./Effects";
 import { cloneTankStats, HoverGroundVehicle } from "./GameEntities/Vehicle";
 import { AiFreigher } from "./GameEntities/AiFreighter";
 import {
@@ -17,6 +18,7 @@ export class Simulation {
     aiVehicles: HoverGroundVehicle[];
     elapsedTime: number;
     private readonly projectiles: ProjectileState[];
+    private readonly visualEffectEvents: VisualEffectSpawnEvent[];
 
     constructor(size: number = 1000) {
         this.playerVehicle = new HoverGroundVehicle(
@@ -28,6 +30,7 @@ export class Simulation {
         this.size = size;
         this.aiVehicles = [];
         this.projectiles = [];
+        this.visualEffectEvents = [];
         this.elapsedTime = 0;
 
         for (let i = 0; i < 10; i++) {
@@ -75,6 +78,10 @@ export class Simulation {
 
     getProjectileList(): ProjectileState[] {
         return this.projectiles;
+    }
+
+    drainVisualEffectEvents(): VisualEffectSpawnEvent[] {
+        return this.visualEffectEvents.splice(0, this.visualEffectEvents.length);
     }
 
     registerProjectile(params: ProjectileSpawnParams): void {
@@ -125,7 +132,7 @@ export class Simulation {
         for (let i = 0; i < vehicles.length; i += 1) {
             const vehicle = vehicles[i];
 
-            if (vehicle.id === projectile.ownerId || vehicle.isDestroyed()) {
+            if (vehicle.id === projectile.ownerId) {
                 continue;
             }
 
@@ -145,12 +152,31 @@ export class Simulation {
                 continue;
             }
 
+            this.visualEffectEvents.push({
+                effectId: ProjectileTypeDefs[projectile.typeId].hitEffectId,
+                position: projectile.position.clone(),
+                direction: projectile.velocity.clone().normalize(),
+            });
+            if (vehicle.isDestroyed()) {
+                return true;
+            }
+
+            const wasDestroyed = vehicle.isDestroyed();
             vehicle.takeDamage({
                 projectileId: projectile.id,
                 projectileTypeId: projectile.typeId,
                 shooterId: projectile.ownerId,
                 damage,
             });
+            if (!wasDestroyed && vehicle.isDestroyed()) {
+                const deathEffectPosition = vehicle.getPosition().clone();
+                deathEffectPosition.y += vehicle.getCollisionRadius() * 0.35;
+                this.visualEffectEvents.push({
+                    effectId: vehicle.stats.deathEffectId,
+                    position: deathEffectPosition,
+                    direction: projectile.velocity.clone().normalize(),
+                });
+            }
             return true;
         }
 

@@ -1,10 +1,12 @@
 import { Color, Vector3 } from "three";
+import type { EffectId } from "./Effects";
 import { newId } from "./idGenerator";
 
 export type ProjectileId = "20mmBlueBlaster";
 
 export type ProjectileStats = {
     damage: number;
+    hitEffectId: EffectId;
     lifeSeconds: number;
     radius: number;
     muzzleVelocity: number;
@@ -15,6 +17,7 @@ export type ProjectileStats = {
 export const ProjectileTypeDefs: Record<ProjectileId, ProjectileStats> = {
     "20mmBlueBlaster": {
         damage: 25,
+        hitEffectId: "blue20mmHit",
         lifeSeconds: 3.0,
         radius: 0.35,
         muzzleVelocity: 500,

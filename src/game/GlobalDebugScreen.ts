@@ -47,6 +47,11 @@ class GlobalDebugScreenSingleton {
         this.root?.classList.toggle("debug-panel-hidden", !this.isVisible);
     }
 
+    hide(): void {
+        this.isVisible = false;
+        this.root?.classList.add("debug-panel-hidden");
+    }
+
     private render(): void {
         if (!this.content) {
             return;

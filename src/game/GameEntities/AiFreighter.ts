@@ -13,6 +13,7 @@ export const freighterStats: HoverGroundVehicleStats = {
     yawTorqueNewtonMeters: 2000000,
     yawFriction: 1000000,
     collisionRadius: 7.5,
+    deathEffectId: "vehicleDeathExplosion",
     maxHealth: 25,
     primaryWeaponTypeId: "20mmBlueBlaster",
 };
@@ -48,6 +49,6 @@ export class AiFreigher extends HoverGroundVehicle {
 
     takeDamage(hit: ProjectileHit) {
         super.takeDamage(hit);
-        this.isDead = true;
+        this.isDead = this.isDestroyed();
     }
 }

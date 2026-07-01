@@ -46,7 +46,7 @@ export class GameApp {
             this.input.isPrimaryFirePressed(),
         );
         this.sim.tick(deltaTime);
-        this.threeEngine.render();
+        this.threeEngine.render(deltaTime);
 
         this.animationFrameId = window.requestAnimationFrame(this.renderFrame);
     };

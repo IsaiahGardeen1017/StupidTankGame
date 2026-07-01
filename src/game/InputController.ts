@@ -1,12 +1,18 @@
 import { Vector2 } from "three";
 import { GlobalDebugScreen } from "./GlobalDebugScreen";
+import { GlobalOptionsPanel } from "./GlobalOptionsPanel";
 
 export class InputController {
     private readonly pressedKeys = new Set<string>();
 
     private readonly onKeyDown = (event: KeyboardEvent): void => {
         if (event.code === "KeyY" && !event.repeat) {
+            GlobalOptionsPanel.hide();
             GlobalDebugScreen.toggle();
+        }
+        if (event.code === "KeyO" && !event.repeat) {
+            GlobalDebugScreen.hide();
+            GlobalOptionsPanel.toggle();
         }
 
         this.pressedKeys.add(event.code);

@@ -2,6 +2,7 @@ import './style.css';
 import { AudioManager } from './game/AudioManager';
 import { GameApp } from './game/GameApp';
 import { GlobalDebugScreen } from './game/GlobalDebugScreen';
+import { GlobalOptionsPanel } from './game/GlobalOptionsPanel';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -31,6 +32,7 @@ if (!gameShell) {
 }
 
 GlobalDebugScreen.initialize(gameShell);
+GlobalOptionsPanel.initialize(gameShell);
 void AudioManager.initialize();
 
 const game = new GameApp(canvas);

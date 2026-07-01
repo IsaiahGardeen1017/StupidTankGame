@@ -93,3 +93,28 @@ body {
   font-variant-numeric: tabular-nums;
   white-space: pre-wrap;
 }
+
+.options-panel {
+  pointer-events: auto;
+}
+
+.options-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  color: rgba(232, 242, 232, 0.92);
+}
+
+.options-value {
+  color: rgba(232, 242, 232, 0.72);
+  font-variant-numeric: tabular-nums;
+}
+
+.options-slider {
+  width: 100%;
+  margin-top: 0.75rem;
+  accent-color: #b8ff91;
+}

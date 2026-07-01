@@ -1,5 +1,6 @@
 import { Vector2, Vector3 } from "three";
 import { AudioManager } from "../AudioManager";
+import type { EffectId } from "../Effects";
 import { newId } from "../idGenerator";
 import { GlobalDebugScreen } from "../GlobalDebugScreen";
 import { calculateMomentOfIntertia } from "../utils";
@@ -16,6 +17,7 @@ export type HoverGroundVehicleStats = {
     yawTorqueNewtonMeters: number;
     yawFriction: number;
     collisionRadius: number;
+    deathEffectId: EffectId;
     maxHealth: number;
     primaryWeaponTypeId: BlasterIds;
 };
@@ -29,6 +31,7 @@ export const cloneTankStats: HoverGroundVehicleStats = {
     yawTorqueNewtonMeters: 2_000_000,
     yawFriction: 1_000_000,
     collisionRadius: 4,
+    deathEffectId: "vehicleDeathExplosion",
     maxHealth: 100,
     primaryWeaponTypeId: "20mmBlueBlaster",
 };

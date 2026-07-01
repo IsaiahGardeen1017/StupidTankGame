@@ -16,6 +16,7 @@ import {
     Vector3,
     WebGLRenderer,
 } from "three";
+import { EffectSystem } from "./Effects";
 import { Meshes } from "./presets/assets";
 import type { HoverGroundVehicle } from "./GameEntities/Vehicle";
 import type { Simulation } from "./Simulation";
@@ -51,6 +52,7 @@ export class ThreeJsEngine {
     private readonly renderer: WebGLRenderer;
     private readonly scene = new Scene();
     private readonly cam = new PerspectiveCamera(60, 1, 0.1, 2500);
+    private readonly effectSystem: EffectSystem;
     private readonly vehicleGroups = new Map<string, VehicleRenderState>();
     private readonly projectileMeshes = new Map<
         string,
@@ -65,6 +67,7 @@ export class ThreeJsEngine {
             canvas: this.canvas,
         });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.effectSystem = new EffectSystem(this.scene);
         this.getOrCreateVehicleGroup(this.sim.getPlayerVehicle());
         this.setupScene();
     }
@@ -287,8 +290,14 @@ export class ThreeJsEngine {
         this.renderer.setSize(width, height, false);
     }
 
-    render(): void {
+    render(deltaTime: number): void {
         this.syncSceneObjects();
+        const effectEvents = this.sim.drainVisualEffectEvents();
+
+        for (let i = 0; i < effectEvents.length; i += 1) {
+            this.effectSystem.spawn(effectEvents[i]);
+        }
+        this.effectSystem.update(deltaTime);
 
         const entities = this.sim.getVehicleList();
 
@@ -350,6 +359,7 @@ export class ThreeJsEngine {
     }
 
     dispose(): void {
+        this.effectSystem.dispose();
         this.renderer.dispose();
     }
 }

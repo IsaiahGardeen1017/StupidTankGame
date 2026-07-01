@@ -17,6 +17,7 @@ class AudioManagerSingleton {
     private readonly maxVoicesTotal = 24;
     private initializePromise: Promise<void> | null = null;
     private hasUnlockListeners = false;
+    private masterVolume = 0.45;
 
     initialize(): Promise<void> {
         if (this.initializePromise) {
@@ -25,7 +26,7 @@ class AudioManagerSingleton {
 
         this.audioContext = new AudioContext();
         this.masterGain = this.audioContext.createGain();
-        this.masterGain.gain.value = 0.45;
+        this.masterGain.gain.value = this.masterVolume;
         this.compressor = this.audioContext.createDynamicsCompressor();
         this.compressor.threshold.value = -18;
         this.compressor.knee.value = 12;
@@ -98,6 +99,23 @@ class AudioManagerSingleton {
         };
 
         source.start();
+    }
+
+    getMasterVolume(): number {
+        return this.masterVolume;
+    }
+
+    setMasterVolume(volume: number): void {
+        this.masterVolume = Math.min(1, Math.max(0, volume));
+
+        if (!this.audioContext || !this.masterGain) {
+            return;
+        }
+
+        this.masterGain.gain.setValueAtTime(
+            this.masterVolume,
+            this.audioContext.currentTime,
+        );
     }
 
     private async preloadSounds(): Promise<void> {
