@@ -11,8 +11,8 @@ export class GameApp {
 
     private animationFrameId: number | null = null;
 
-    constructor(canvas: HTMLCanvasElement) {
-        this.threeEngine = new ThreeJsEngine(canvas, this.sim);
+    constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
+        this.threeEngine = new ThreeJsEngine(canvas, this.sim, hudContainer);
         this.threeEngine.handleResize();
 
         window.addEventListener("resize", this.handleResize);

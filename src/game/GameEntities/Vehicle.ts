@@ -8,6 +8,15 @@ import type { Simulation } from "../Simulation";
 import type { ProjectileHit } from "../Projectiles";
 import { type BlasterIds, BLASTERS } from "../presets/blasters";
 
+export type HudDisplayInfo = {
+    name: string;
+    health: {
+        current: number;
+        max: number;
+    };
+    isVisible: boolean;
+};
+
 export type HoverGroundVehicleStats = {
     repulserThrustNewtons: number;
     weightKg: number;
@@ -151,6 +160,21 @@ export class HoverGroundVehicle {
 
     isDestroyed(): boolean {
         return this._health <= 0;
+    }
+
+    getHealth(): number {
+        return this._health;
+    }
+
+    getHudDisplay(): HudDisplayInfo {
+        return {
+            name: this.name,
+            health: {
+                current: this.getHealth(),
+                max: this.stats.maxHealth,
+            },
+            isVisible: !this.isDestroyed(),
+        };
     }
 
     protected tryFirePrimary(elapsedTime: number): boolean {

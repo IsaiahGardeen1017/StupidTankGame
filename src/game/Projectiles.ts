@@ -16,7 +16,7 @@ export type ProjectileStats = {
 
 export const ProjectileTypeDefs: Record<ProjectileId, ProjectileStats> = {
     "20mmBlueBlaster": {
-        damage: 25,
+        damage: 1,
         hitEffectId: "blue20mmHit",
         lifeSeconds: 3.0,
         radius: 0.35,

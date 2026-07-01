@@ -118,3 +118,50 @@ body {
   margin-top: 0.75rem;
   accent-color: #b8ff91;
 }
+
+.world-hud-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.vehicle-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 5.5rem;
+  text-align: center;
+  filter: drop-shadow(0 0.15rem 0.2rem rgba(0, 0, 0, 0.75));
+  will-change: transform;
+}
+
+.vehicle-hud-hidden {
+  display: none;
+}
+
+.vehicle-hud-name {
+  margin-bottom: 0.2rem;
+  color: rgba(248, 255, 248, 0.92);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.vehicle-health-bar {
+  height: 0.38rem;
+  overflow: hidden;
+  border: 1px solid rgba(4, 12, 7, 0.95);
+  border-radius: 999px;
+  background: rgba(95, 9, 9, 0.86);
+}
+
+.vehicle-health-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #70ff65, #d8ff75);
+  transition: width 90ms linear;
+}

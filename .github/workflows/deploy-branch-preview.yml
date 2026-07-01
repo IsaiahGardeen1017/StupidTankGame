@@ -1,0 +1,104 @@
+name: Deploy branch preview
+
+on:
+  push:
+    branches:
+      - "**"
+      - "!gh-pages"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy. Leave blank to deploy the selected workflow branch."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: branch-pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and publish branch preview
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve branch name
+        id: branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.branch }}" ]; then
+            branch="${{ inputs.branch }}"
+          fi
+          echo "name=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.branch.outputs.name }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build static site
+        run: npm run build
+
+      - name: Compute preview path
+        id: preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          slug="$(printf '%s' "${{ steps.branch.outputs.name }}" | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9._-]+#-#g; s#^-+##; s#-+$##')"
+          if [ -z "$slug" ]; then
+            slug="branch"
+          fi
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+
+      - name: Publish preview to gh-pages
+        shell: bash
+        env:
+          PREVIEW_SLUG: ${{ steps.preview.outputs.slug }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          pages_dir="$(mktemp -d)"
+
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch --depth=1 origin gh-pages
+            git worktree add --detach "$pages_dir" FETCH_HEAD
+            git -C "$pages_dir" switch -C gh-pages
+          else
+            git worktree add --detach "$pages_dir"
+            git -C "$pages_dir" switch --orphan gh-pages
+            git -C "$pages_dir" rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          rm -rf "$pages_dir/$PREVIEW_SLUG"
+          mkdir -p "$pages_dir/$PREVIEW_SLUG"
+          cp -R dist/. "$pages_dir/$PREVIEW_SLUG/"
+          touch "$pages_dir/.nojekyll"
+
+          node .github/scripts/render-pages-index.mjs "$pages_dir"
+
+          git -C "$pages_dir" add .
+          if git -C "$pages_dir" diff --cached --quiet; then
+            echo "No Pages changes to publish."
+            exit 0
+          fi
+
+          git -C "$pages_dir" commit -m "Deploy preview for ${{ steps.branch.outputs.name }}"
+          git -C "$pages_dir" push origin gh-pages

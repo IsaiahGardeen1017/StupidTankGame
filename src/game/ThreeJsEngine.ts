@@ -28,6 +28,7 @@ import {
     type ProjectileState,
     ProjectileTypeDefs,
 } from "./Projectiles";
+import { HudOverlaySystem } from "./HudOverlaySystem";
 
 const CAMERA_FOLLOW_DISTANCE = 30;
 const CAMERA_FOLLOW_HEIGHT = 10;
@@ -53,13 +54,18 @@ export class ThreeJsEngine {
     private readonly scene = new Scene();
     private readonly cam = new PerspectiveCamera(60, 1, 0.1, 2500);
     private readonly effectSystem: EffectSystem;
+    private readonly hudOverlaySystem: HudOverlaySystem;
     private readonly vehicleGroups = new Map<string, VehicleRenderState>();
     private readonly projectileMeshes = new Map<
         string,
         ProjectileRenderState
     >();
 
-    constructor(canvas: HTMLCanvasElement, sim: Simulation) {
+    constructor(
+        canvas: HTMLCanvasElement,
+        sim: Simulation,
+        hudContainer: HTMLElement,
+    ) {
         this.canvas = canvas;
         this.sim = sim;
         this.renderer = new WebGLRenderer({
@@ -68,6 +74,7 @@ export class ThreeJsEngine {
         });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.effectSystem = new EffectSystem(this.scene);
+        this.hudOverlaySystem = new HudOverlaySystem(hudContainer, this.canvas);
         this.getOrCreateVehicleGroup(this.sim.getPlayerVehicle());
         this.setupScene();
     }
@@ -355,11 +362,13 @@ export class ThreeJsEngine {
 
         this.cam.position.copy(playerPosition).add(cameraOffset);
         this.cam.lookAt(playerPosition);
+        this.hudOverlaySystem.update(this.sim.aiVehicles, this.cam);
         this.renderer.render(this.scene, this.cam);
     }
 
     dispose(): void {
         this.effectSystem.dispose();
+        this.hudOverlaySystem.dispose();
         this.renderer.dispose();
     }
 }
