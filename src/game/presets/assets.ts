@@ -1,16 +1,6 @@
-import { string } from "three/tsl";
-import { type RGB, rgbFromColor } from "../utils_color";
-
-export type AssetDetails = {
-    //stlFileName: string;
-    FileName: string;
-    flatspinOffset: number;
-    length: number; //Meters
-    color: RGB;
-};
-
 export type GlbMetadata = {
     filename: string;
+    referenceLengthMeters: number;
     hulls: {
         name: string;
         turretMountPoints: string[];
@@ -29,6 +19,7 @@ export type GlbIds = "CMTB";
 export const GlbData: Record<GlbIds, GlbMetadata> = {
     "CMTB": {
         filename: "CMTB.glb",
+        referenceLengthMeters: 8,
         hulls: [{
             name: "Hull",
             turretMountPoints: ["Hardpoint_Turret"],

@@ -5,46 +5,83 @@ import {
     DataTexture,
     DirectionalLight,
     Group,
+    Material,
+    Matrix4,
     Mesh,
     MeshStandardMaterial,
     NearestFilter,
+    Object3D,
     PerspectiveCamera,
     PlaneGeometry,
+    Quaternion,
     RepeatWrapping,
     Scene,
     SphereGeometry,
     Vector3,
     WebGLRenderer,
 } from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { EffectSystem } from "./Effects";
-import { Meshes } from "./presets/assets";
 import type { HoverGroundVehicle } from "./GameEntities/Vehicle";
+import { HudOverlaySystem } from "./HudOverlaySystem";
 import type { Simulation } from "./Simulation";
-import { STLLoader } from "three/addons/loaders/STLLoader.js";
-import { randInt } from "./utils";
-import { hashFromColor, rgb, rgbFromColor } from "./utils_color";
+import {
+    GlbData,
+    type GlbIds,
+    type GlbMetadata,
+} from "./presets/assets";
 import {
     getProjectileColor,
     type ProjectileState,
     ProjectileTypeDefs,
 } from "./presets/Projectiles";
-import { HudOverlaySystem } from "./HudOverlaySystem";
+import {
+    getVehicleDetails,
+    type VehicleDetailGuns,
+    type VehicleDetails,
+    type VehicleDetailHull,
+    type VehicleDetailTurret,
+} from "./presets/vehicles";
+import { randInt } from "./utils";
+import { hashFromColor, rgb, rgbFromColor } from "./utils_color";
 
 const CAMERA_FOLLOW_DISTANCE = 30;
 const CAMERA_FOLLOW_HEIGHT = 10;
 const GROUND_SIZE = 1000;
 const MIN_DIRECTION_LENGTH_SQUARED = 0.0001;
 const DESTROYED_VEHICLE_COLOR = new Color("#1b1a18");
+const VEHICLE_MODEL_FORWARD_ALIGNMENT_Y = Math.PI;
 
 type VehicleRenderState = {
     root: Group;
-    material: MeshStandardMaterial;
+    materials: MeshStandardMaterial[];
 };
 
 type ProjectileRenderState = {
     root: Group;
     materials: MeshStandardMaterial[];
     meshes: Mesh[];
+};
+
+type GlbTemplate = {
+    metadata: GlbMetadata;
+    namedObjects: Map<string, Object3D>;
+};
+
+type MountedParentMetadata = {
+    gunMountPointIds: string[];
+    turretMountPointIds: string[];
+};
+
+type AssembledPart = {
+    root: Object3D;
+    materials: MeshStandardMaterial[];
+};
+
+type RelativeTransform = {
+    position: Vector3;
+    quaternion: Quaternion;
+    scale: Vector3;
 };
 
 export class ThreeJsEngine {
@@ -60,6 +97,8 @@ export class ThreeJsEngine {
         string,
         ProjectileRenderState
     >();
+    private readonly gltfLoader = new GLTFLoader();
+    private readonly glbTemplateCache = new Map<GlbIds, Promise<GlbTemplate>>();
 
     constructor(
         canvas: HTMLCanvasElement,
@@ -83,66 +122,365 @@ export class ThreeJsEngine {
         vehicle: HoverGroundVehicle,
     ): VehicleRenderState {
         const vehicleRoot = new Group();
-        const meshDetails = Meshes[vehicle.stats.meshId];
-        const vehicleMaterial = new MeshStandardMaterial({
-            color: hashFromColor(meshDetails?.color ?? "#85c0ea"),
+        const vehicleState: VehicleRenderState = {
+            root: vehicleRoot,
+            materials: [],
+        };
+
+        void this.populateVehicleGroup(vehicleRoot, vehicleState, vehicle)
+            .catch((error: unknown) => {
+                console.error(
+                    `Failed to build vehicle model "${vehicle.stats.meshId}".`,
+                    error,
+                );
+            });
+
+        return vehicleState;
+    }
+
+    private async populateVehicleGroup(
+        vehicleRoot: Group,
+        vehicleState: VehicleRenderState,
+        vehicle: HoverGroundVehicle,
+    ): Promise<void> {
+        const vehicleDetails = getVehicleDetails(vehicle.stats.meshId);
+        const assemblyRoot = await this.buildVehicleAssembly(vehicleDetails);
+
+        vehicleRoot.clear();
+        vehicleRoot.add(assemblyRoot.root);
+        vehicleState.materials.splice(
+            0,
+            vehicleState.materials.length,
+            ...assemblyRoot.materials,
+        );
+    }
+
+    private async buildVehicleAssembly(
+        vehicleDetails: VehicleDetails,
+    ): Promise<AssembledPart> {
+        const root = new Group();
+        const materials: MeshStandardMaterial[] = [];
+        const hullPart = await this.clonePart(
+            vehicleDetails.hull.glb,
+            vehicleDetails.hull.objectName,
+        );
+
+        root.add(hullPart.root);
+        materials.push(...hullPart.materials);
+
+        const hullMetadata = this.getHullMetadata(vehicleDetails.hull);
+
+        for (let i = 0; i < vehicleDetails.hull.guns.length; i += 1) {
+            const gunPart = await this.buildMountedGun(
+                hullPart.root,
+                hullMetadata,
+                vehicleDetails.hull.guns[i],
+            );
+            materials.push(...gunPart.materials);
+        }
+
+        for (let i = 0; i < vehicleDetails.hull.turrets.length; i += 1) {
+            const turretPart = await this.buildMountedTurret(
+                hullPart.root,
+                hullMetadata,
+                vehicleDetails.hull.turrets[i],
+            );
+            materials.push(...turretPart.materials);
+        }
+
+        root.rotation.y = VEHICLE_MODEL_FORWARD_ALIGNMENT_Y;
+        this.centerAssembly(root);
+
+        return {
+            root,
+            materials,
+        };
+    }
+
+    private async buildMountedTurret(
+        parentRoot: Object3D,
+        parentMetadata: MountedParentMetadata,
+        turretDef: VehicleDetailTurret,
+    ): Promise<AssembledPart> {
+        const sourceMountPointId = parentMetadata.turretMountPointIds[0];
+
+        if (!sourceMountPointId) {
+            throw new Error(
+                `No prototype turret mount point configured for "${turretDef.objectName}".`,
+            );
+        }
+
+        const targetMountPoint = this.getNamedDescendant(
+            parentRoot,
+            turretDef.parentMountpointId,
+        );
+        const turretPart = await this.clonePart(
+            turretDef.glb,
+            turretDef.objectName,
+        );
+
+        this.attachPartToMountPoint(
+            turretPart.root,
+            targetMountPoint,
+            await this.getRelativeTransform(
+                turretDef.glb,
+                turretDef.objectName,
+                sourceMountPointId,
+            ),
+        );
+
+        const turretMetadata = this.getTurretMetadata(turretDef);
+
+        for (let i = 0; i < turretDef.guns.length; i += 1) {
+            const gunPart = await this.buildMountedGun(
+                turretPart.root,
+                turretMetadata,
+                turretDef.guns[i],
+            );
+            turretPart.materials.push(...gunPart.materials);
+        }
+
+        return turretPart;
+    }
+
+    private async buildMountedGun(
+        parentRoot: Object3D,
+        parentMetadata: MountedParentMetadata,
+        gunDef: VehicleDetailGuns,
+    ): Promise<AssembledPart> {
+        const sourceMountPointId = parentMetadata.gunMountPointIds[0];
+
+        if (!sourceMountPointId) {
+            throw new Error(
+                `No prototype gun mount point configured for "${gunDef.objectName}".`,
+            );
+        }
+
+        const targetMountPoint = this.getNamedDescendant(
+            parentRoot,
+            gunDef.parentMountpointId,
+        );
+        const gunPart = await this.clonePart(gunDef.glb, gunDef.objectName);
+
+        this.attachPartToMountPoint(
+            gunPart.root,
+            targetMountPoint,
+            await this.getRelativeTransform(
+                gunDef.glb,
+                gunDef.objectName,
+                sourceMountPointId,
+            ),
+        );
+
+        return gunPart;
+    }
+
+    private attachPartToMountPoint(
+        partRoot: Object3D,
+        targetMountPoint: Object3D,
+        relativeTransform: RelativeTransform,
+    ): void {
+        partRoot.position.copy(relativeTransform.position);
+        partRoot.quaternion.copy(relativeTransform.quaternion);
+        partRoot.scale.copy(relativeTransform.scale);
+        targetMountPoint.add(partRoot);
+    }
+
+    private async getRelativeTransform(
+        glbId: GlbIds,
+        objectName: string,
+        mountPointId: string,
+    ): Promise<RelativeTransform> {
+        const template = await this.getGlbTemplate(glbId);
+        const sourceObject = this.getNamedTemplateObject(template, objectName);
+        const sourceMountPoint = this.getNamedTemplateObject(
+            template,
+            mountPointId,
+        );
+        const relativeMatrix = new Matrix4()
+            .copy(sourceMountPoint.matrixWorld)
+            .invert()
+            .multiply(sourceObject.matrixWorld);
+        const position = new Vector3();
+        const quaternion = new Quaternion();
+        const scale = new Vector3();
+
+        relativeMatrix.decompose(position, quaternion, scale);
+
+        return {
+            position,
+            quaternion,
+            scale,
+        };
+    }
+
+    private async clonePart(
+        glbId: GlbIds,
+        objectName: string,
+    ): Promise<AssembledPart> {
+        const template = await this.getGlbTemplate(glbId);
+        const sourceObject = this.getNamedTemplateObject(template, objectName);
+        const clonedRoot = sourceObject.clone(true);
+        const materials: MeshStandardMaterial[] = [];
+
+        clonedRoot.traverse((node: Object3D) => {
+            if (!(node instanceof Mesh)) {
+                return;
+            }
+
+            if (Array.isArray(node.material)) {
+                node.material = node.material.map((material) => {
+                    const clonedMaterial = this.cloneVehicleMaterial(material);
+                    materials.push(clonedMaterial);
+                    return clonedMaterial;
+                });
+                return;
+            }
+
+            const clonedMaterial = this.cloneVehicleMaterial(node.material);
+            node.material = clonedMaterial;
+            materials.push(clonedMaterial);
+        });
+
+        return {
+            root: clonedRoot,
+            materials,
+        };
+    }
+
+    private cloneVehicleMaterial(material: Material): MeshStandardMaterial {
+        if (material instanceof MeshStandardMaterial) {
+            return material.clone();
+        }
+
+        const fallbackMaterial = new MeshStandardMaterial({
             roughness: 0.7,
             metalness: 0.2,
         });
+        const materialWithColor = material as Material & {
+            color?: Color;
+        };
 
-        if (!meshDetails) {
-            console.error(
-                `No mesh metadata found for meshId "${vehicle.stats.meshId}".`,
-            );
-            return {
-                root: vehicleRoot,
-                material: vehicleMaterial,
-            };
+        if (materialWithColor.color) {
+            fallbackMaterial.color.copy(materialWithColor.color);
         }
 
-        const loader = new STLLoader();
+        return fallbackMaterial;
+    }
 
-        loader.load(
-            this.getMeshUrl(vehicle),
-            (geometry) => {
-                geometry.computeVertexNormals();
-                geometry.center();
-
-                const mesh = new Mesh(
-                    geometry,
-                    vehicleMaterial,
-                );
-                const flatspinRoot = new Group();
-
-                mesh.rotation.x = -Math.PI / 2;
-                flatspinRoot.rotation.y = meshDetails.flatspinOffset;
-                flatspinRoot.add(mesh);
-
-                const unscaledBounds = new Box3().setFromObject(flatspinRoot);
-                const unscaledSize = unscaledBounds.getSize(new Vector3());
-                const frontToBackLength = Math.max(unscaledSize.z, 0.0001);
-                const modelScale = meshDetails.length / frontToBackLength;
-
-                flatspinRoot.scale.setScalar(modelScale);
-
-                const scaledBounds = new Box3().setFromObject(flatspinRoot);
-                flatspinRoot.position.y = -scaledBounds.min.y;
-
-                vehicleRoot.add(flatspinRoot);
-            },
-            undefined,
-            (error) => {
-                console.error(
-                    `Failed to load STL model "${meshDetails.stlFileName}".`,
-                    error,
-                );
-            },
+    private getHullMetadata(hullDef: VehicleDetailHull): MountedParentMetadata {
+        const glbMetadata = GlbData[hullDef.glb];
+        const hullMetadata = glbMetadata.hulls.find((hull) =>
+            hull.name === hullDef.objectName
         );
 
+        if (!hullMetadata) {
+            throw new Error(
+                `No hull metadata found for "${hullDef.objectName}" in "${hullDef.glb}".`,
+            );
+        }
+
         return {
-            root: vehicleRoot,
-            material: vehicleMaterial,
+            gunMountPointIds: hullMetadata.gunMountPoints,
+            turretMountPointIds: hullMetadata.turretMountPoints,
         };
+    }
+
+    private getTurretMetadata(
+        turretDef: VehicleDetailTurret,
+    ): MountedParentMetadata {
+        const glbMetadata = GlbData[turretDef.glb];
+        const turretMetadata = glbMetadata.turrets.find((turret) =>
+            turret.name === turretDef.objectName
+        );
+
+        if (!turretMetadata) {
+            throw new Error(
+                `No turret metadata found for "${turretDef.objectName}" in "${turretDef.glb}".`,
+            );
+        }
+
+        return {
+            gunMountPointIds: turretMetadata.gunMountPoints,
+            turretMountPointIds: [],
+        };
+    }
+
+    private centerAssembly(root: Group): void {
+        root.updateMatrixWorld(true);
+
+        const bounds = new Box3().setFromObject(root);
+        const center = bounds.getCenter(new Vector3());
+
+        for (let i = 0; i < root.children.length; i += 1) {
+            root.children[i].position.x -= center.x;
+            root.children[i].position.y -= bounds.min.y;
+            root.children[i].position.z -= center.z;
+        }
+    }
+
+    private getNamedDescendant(root: Object3D, objectName: string): Object3D {
+        const targetObject = root.getObjectByName(objectName);
+
+        if (!targetObject) {
+            throw new Error(`Expected mounted object "${objectName}" was not found.`);
+        }
+
+        return targetObject;
+    }
+
+    private getNamedTemplateObject(
+        template: GlbTemplate,
+        objectName: string,
+    ): Object3D {
+        const namedObject = template.namedObjects.get(objectName);
+
+        if (!namedObject) {
+            throw new Error(
+                `Object "${objectName}" was not found in "${template.metadata.filename}".`,
+            );
+        }
+
+        return namedObject;
+    }
+
+    private getGlbTemplate(glbId: GlbIds): Promise<GlbTemplate> {
+        const cachedTemplate = this.glbTemplateCache.get(glbId);
+
+        if (cachedTemplate) {
+            return cachedTemplate;
+        }
+
+        const templatePromise = new Promise<GlbTemplate>((resolve, reject) => {
+            this.gltfLoader.load(
+                `${import.meta.env.BASE_URL}assets/${GlbData[glbId].filename}`,
+                (gltf) => {
+                    gltf.scene.updateMatrixWorld(true);
+                    const namedObjects = new Map<string, Object3D>();
+
+                    gltf.scene.traverse((object: Object3D) => {
+                        if (
+                            object.name.length === 0 ||
+                            namedObjects.has(object.name)
+                        ) {
+                            return;
+                        }
+
+                        namedObjects.set(object.name, object);
+                    });
+
+                    resolve({
+                        metadata: GlbData[glbId],
+                        namedObjects,
+                    });
+                },
+                undefined,
+                reject,
+            );
+        });
+
+        this.glbTemplateCache.set(glbId, templatePromise);
+        return templatePromise;
     }
 
     private getOrCreateVehicleGroup(
@@ -224,9 +562,12 @@ export class ThreeJsEngine {
             }
 
             this.scene.remove(groupState.root);
-            groupState.material.dispose();
+            for (let i = 0; i < groupState.materials.length; i += 1) {
+                groupState.materials[i].dispose();
+            }
             this.vehicleGroups.delete(id);
         });
+
         this.projectileMeshes.forEach((projectileState, id) => {
             if (activeProjectileIds.has(id)) {
                 return;
@@ -245,17 +586,6 @@ export class ThreeJsEngine {
         });
     }
 
-    private getMeshUrl(vehicle: HoverGroundVehicle): string {
-        const meshDetails = Meshes[vehicle.stats.meshId];
-
-        if (!meshDetails) {
-            throw new Error(
-                `No mesh metadata found for meshId "${vehicle.stats.meshId}".`,
-            );
-        }
-
-        return `${import.meta.env.BASE_URL}assets/${meshDetails.stlFileName}`;
-    }
     private setupScene(): void {
         this.scene.background = new Color("#8ec9ff");
         const ambientLight = new AmbientLight("#ffffff", 2.1);
@@ -318,18 +648,26 @@ export class ThreeJsEngine {
 
             entityGroup.root.position.copy(entityPosition);
 
-            const meshDetails = Meshes[entity.stats.meshId];
-            const baseColor = new Color(hashFromColor(meshDetails.color));
+            const vehicleDetails = getVehicleDetails(entity.stats.meshId);
+            const baseColor = new Color(hashFromColor(vehicleDetails.color));
 
-            entityGroup.material.color.copy(
-                entity.isDestroyed() ? DESTROYED_VEHICLE_COLOR : baseColor,
-            );
-            entityGroup.material.emissive.copy(
-                entity.isDestroyed() ? DESTROYED_VEHICLE_COLOR : baseColor,
-            );
-            entityGroup.material.emissiveIntensity = entity.isDestroyed()
-                ? 0.15
-                : 0.2;
+            for (
+                let materialIndex = 0;
+                materialIndex < entityGroup.materials.length;
+                materialIndex += 1
+            ) {
+                const material = entityGroup.materials[materialIndex];
+
+                material.color.copy(
+                    entity.isDestroyed() ? DESTROYED_VEHICLE_COLOR : baseColor,
+                );
+                material.emissive.copy(
+                    entity.isDestroyed() ? DESTROYED_VEHICLE_COLOR : baseColor,
+                );
+                material.emissiveIntensity = entity.isDestroyed()
+                    ? 0.15
+                    : 0.2;
+            }
 
             if (entityDirection.lengthSq() > MIN_DIRECTION_LENGTH_SQUARED) {
                 entityGroup.root.rotation.y = Math.atan2(
@@ -408,7 +746,6 @@ function createGroundTexture(): DataTexture {
         Math.floor(64 / pixelationScale),
         Math.floor(64 / pixelationScale),
     );
-    //texture.repeat.set(32, 32);
     texture.magFilter = NearestFilter;
     texture.minFilter = NearestFilter;
     texture.needsUpdate = true;

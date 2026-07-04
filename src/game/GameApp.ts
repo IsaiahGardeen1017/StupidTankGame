@@ -5,13 +5,14 @@ import { ThreeJsEngine } from "./ThreeJsEngine";
 
 export class GameApp {
     private readonly clock = new Clock();
-    private readonly input = new InputController();
+    private readonly input: InputController;
     private readonly threeEngine: ThreeJsEngine;
     readonly sim = new Simulation();
 
     private animationFrameId: number | null = null;
 
     constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
+        this.input = new InputController(canvas);
         this.threeEngine = new ThreeJsEngine(canvas, this.sim, hudContainer);
         this.threeEngine.handleResize();
 
@@ -46,7 +47,7 @@ export class GameApp {
             this.input.isPrimaryFirePressed(),
         );
         this.sim.tick(deltaTime);
-        this.threeEngine.render(deltaTime);
+        this.threeEngine.render(deltaTime, this.input.getPointerOffset());
 
         this.animationFrameId = window.requestAnimationFrame(this.renderFrame);
     };

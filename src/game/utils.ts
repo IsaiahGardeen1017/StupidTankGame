@@ -1,4 +1,5 @@
-import { Meshes } from "./presets/assets";
+import { GlbData } from "./presets/assets";
+import { getVehicleDetails } from "./presets/vehicles";
 import { Vector2 } from "three";
 
 export function clamp(value: number, min: number, max: number): number {
@@ -18,13 +19,10 @@ export function calculateMomentOfIntertia(
     meshId: string,
     weightKg: number,
 ): number {
-    const meshDetails = Meshes[meshId];
+    const vehicleDetails = getVehicleDetails(meshId);
+    const hullAsset = GlbData[vehicleDetails.hull.glb];
 
-    if (!meshDetails) {
-        throw new Error(`No mesh metadata found for meshId "${meshId}".`);
-    }
-
-    const length = Math.max(meshDetails.length, 0);
+    const length = Math.max(hullAsset.referenceLengthMeters, 0);
     const width = length / 2;
     const massKg = Math.max(weightKg, 0);
 

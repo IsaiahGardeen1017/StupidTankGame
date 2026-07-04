@@ -1,4 +1,3 @@
-import { string } from "three/tsl";
 import { type RGB, rgbFromColor } from "../utils_color";
 import type { GlbIds } from "./assets";
 import type { BlasterIds } from "./blasters";
@@ -77,3 +76,15 @@ export const Defined_Vehicles: Record<VehicleTypes, VehicleDetails> = {
         },
     },
 };
+
+export function getVehicleDetails(vehicleType: string): VehicleDetails {
+    const vehicleDetails = Defined_Vehicles[vehicleType as VehicleTypes];
+
+    if (!vehicleDetails) {
+        throw new Error(
+            `No vehicle metadata found for vehicle type "${vehicleType}".`,
+        );
+    }
+
+    return vehicleDetails;
+}

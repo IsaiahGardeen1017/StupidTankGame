@@ -20,7 +20,7 @@ export type HudDisplayInfo = {
 export type HoverGroundVehicleStats = {
     repulserThrustNewtons: number;
     weightKg: number;
-    meshId: string; // Determines what STL file is used.
+    meshId: string; // Determines what vehicle definition is rendered.
     linearFrictionFactor: number;
     momentOfInertia: number;
     yawTorqueNewtonMeters: number;
@@ -34,9 +34,9 @@ export type HoverGroundVehicleStats = {
 export const cloneTankStats: HoverGroundVehicleStats = {
     repulserThrustNewtons: 1_000_000,
     weightKg: 50_000,
-    meshId: "clone-tank",
+    meshId: "CMTB",
     linearFrictionFactor: 10_000,
-    momentOfInertia: calculateMomentOfIntertia("clone-tank", 50_000),
+    momentOfInertia: calculateMomentOfIntertia("CMTB", 50_000),
     yawTorqueNewtonMeters: 2_000_000,
     yawFriction: 1_000_000,
     collisionRadius: 4,
@@ -182,7 +182,7 @@ export class HoverGroundVehicle {
 
         const cooldown =
             BLASTERS[this.stats.primaryWeaponTypeId].shootCooldown / 1000;
-        if (this.stats.meshId === "clone-tank") {
+        if (this.stats.meshId === "CMTB") {
             GlobalDebugScreen.show("cooldown", cooldown);
             GlobalDebugScreen.show("lastshot", this._lastShot);
             GlobalDebugScreen.show("elapsed", elapsedTime);

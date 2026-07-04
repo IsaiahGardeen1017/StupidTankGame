@@ -9,7 +9,8 @@ const targetDir = path.join(repoRoot, "public", "assets");
 await mkdir(targetDir, { recursive: true });
 
 const assetFileNames = (await readdir(sourceDir)).filter((fileName) =>
-    fileName.toLowerCase().endsWith(".stl"),
+    fileName.toLowerCase().endsWith(".stl") ||
+    fileName.toLowerCase().endsWith(".glb"),
 );
 
 await Promise.all(
