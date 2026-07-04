@@ -5,7 +5,7 @@ import { newId } from "../idGenerator";
 import { GlobalDebugScreen } from "../GlobalDebugScreen";
 import { calculateMomentOfIntertia } from "../utils";
 import type { Simulation } from "../Simulation";
-import type { ProjectileHit } from "../Projectiles";
+import type { ProjectileHit } from "../presets/Projectiles";
 import { type BlasterIds, BLASTERS } from "../presets/blasters";
 
 export type HudDisplayInfo = {

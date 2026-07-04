@@ -1,6 +1,6 @@
 import { Vector2, type Vector3 } from "three";
 import type { Simulation } from "../Simulation";
-import type { ProjectileHit } from "../Projectiles";
+import type { ProjectileHit } from "../presets/Projectiles";
 import { calculateMomentOfIntertia, randInt } from "../utils";
 import { HoverGroundVehicle, type HoverGroundVehicleStats } from "./Vehicle";
 

@@ -1,8 +1,8 @@
 import { Color, Vector3 } from "three";
-import type { EffectId } from "./Effects";
-import { newId } from "./idGenerator";
+import type { EffectId } from "../Effects";
+import { newId } from "../idGenerator";
 
-export type ProjectileId = "20mmBlueBlaster";
+export type ProjectileId = "20mmBlueBlaster" | "CmctMainCannon";
 
 export type ProjectileStats = {
     damage: number;
@@ -23,6 +23,15 @@ export const ProjectileTypeDefs: Record<ProjectileId, ProjectileStats> = {
         muzzleVelocity: 500,
         renderColor: "#00d5ff",
         renderRadius: 0.35,
+    },
+    "CmctMainCannon": {
+        damage: 5,
+        hitEffectId: "blue20mmHit",
+        lifeSeconds: 3.0,
+        radius: 0.5,
+        muzzleVelocity: 150,
+        renderColor: "#f69000",
+        renderRadius: 0.5,
     },
 };
 

@@ -7,7 +7,7 @@ import {
     type ProjectileSpawnParams,
     type ProjectileState,
     ProjectileTypeDefs,
-} from "./Projectiles";
+} from "./presets/Projectiles";
 import { distanceSqFromPointToSegment2D, randInt } from "./utils";
 
 export class Simulation {
@@ -81,7 +81,10 @@ export class Simulation {
     }
 
     drainVisualEffectEvents(): VisualEffectSpawnEvent[] {
-        return this.visualEffectEvents.splice(0, this.visualEffectEvents.length);
+        return this.visualEffectEvents.splice(
+            0,
+            this.visualEffectEvents.length,
+        );
     }
 
     registerProjectile(params: ProjectileSpawnParams): void {

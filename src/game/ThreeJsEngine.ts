@@ -27,7 +27,7 @@ import {
     getProjectileColor,
     type ProjectileState,
     ProjectileTypeDefs,
-} from "./Projectiles";
+} from "./presets/Projectiles";
 import { HudOverlaySystem } from "./HudOverlaySystem";
 
 const CAMERA_FOLLOW_DISTANCE = 30;
