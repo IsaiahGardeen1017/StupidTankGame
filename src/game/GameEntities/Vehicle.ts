@@ -2,7 +2,6 @@ import { Vector2, Vector3 } from "three";
 import { AudioManager } from "../AudioManager";
 import type { EffectId } from "../Effects";
 import { newId } from "../idGenerator";
-import { GlobalDebugScreen } from "../GlobalDebugScreen";
 import { calculateMomentOfIntertia } from "../utils";
 import type { Simulation } from "../Simulation";
 import type { ProjectileHit } from "../presets/Projectiles";
@@ -127,7 +126,6 @@ export class HoverGroundVehicle {
         this._position.add(
             this._velocity.clone().multiplyScalar(deltaT),
         );
-        GlobalDebugScreen.show(`${this.id} position`, this._position);
 
         //Alter Rotation
         const rotationalAcceleration = this._yawInput *
@@ -179,20 +177,8 @@ export class HoverGroundVehicle {
 
     protected tryFirePrimary(elapsedTime: number): boolean {
         const weaponTypeId = this.stats.primaryWeaponTypeId;
-
         const cooldown =
             BLASTERS[this.stats.primaryWeaponTypeId].shootCooldown / 1000;
-        if (this.stats.meshId === "CMTB") {
-            GlobalDebugScreen.show("cooldown", cooldown);
-            GlobalDebugScreen.show("lastshot", this._lastShot);
-            GlobalDebugScreen.show("elapsed", elapsedTime);
-            GlobalDebugScreen.show(
-                `detail`,
-                `${this._lastShot} + ${cooldown} (${
-                    this._lastShot + cooldown
-                })< ${elapsedTime}`,
-            );
-        }
         if ((this._lastShot + cooldown) > elapsedTime) {
             return false;
         }

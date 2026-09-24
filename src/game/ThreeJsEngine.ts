@@ -17,9 +17,11 @@ import {
     RepeatWrapping,
     Scene,
     SphereGeometry,
+    Vector2,
     Vector3,
     WebGLRenderer,
 } from "three";
+import { CameraTuning } from "./CameraTuning";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { EffectSystem } from "./Effects";
 import type { HoverGroundVehicle } from "./GameEntities/Vehicle";
@@ -45,12 +47,11 @@ import {
 import { randInt } from "./utils";
 import { hashFromColor, rgb, rgbFromColor } from "./utils_color";
 
-const CAMERA_FOLLOW_DISTANCE = 30;
-const CAMERA_FOLLOW_HEIGHT = 10;
 const GROUND_SIZE = 1000;
 const MIN_DIRECTION_LENGTH_SQUARED = 0.0001;
 const DESTROYED_VEHICLE_COLOR = new Color("#1b1a18");
 const VEHICLE_MODEL_FORWARD_ALIGNMENT_Y = Math.PI;
+const CAMERA_LOOK_DISTANCE = 200;
 
 type VehicleRenderState = {
     root: Group;
@@ -99,6 +100,8 @@ export class ThreeJsEngine {
     >();
     private readonly gltfLoader = new GLTFLoader();
     private readonly glbTemplateCache = new Map<GlbIds, Promise<GlbTemplate>>();
+    private cameraYaw = 0;
+    private cameraPitchOffset = 0;
 
     constructor(
         canvas: HTMLCanvasElement,
@@ -410,12 +413,9 @@ export class ThreeJsEngine {
         root.updateMatrixWorld(true);
 
         const bounds = new Box3().setFromObject(root);
-        const center = bounds.getCenter(new Vector3());
 
         for (let i = 0; i < root.children.length; i += 1) {
-            root.children[i].position.x -= center.x;
             root.children[i].position.y -= bounds.min.y;
-            root.children[i].position.z -= center.z;
         }
     }
 
@@ -603,19 +603,11 @@ export class ThreeJsEngine {
         this.scene.add(ground);
 
         this.syncSceneObjects();
+        const playerDirection = this.sim.getPlayerVehicle().getDirection();
 
-        const playerPosition = this.sim.getPlayerVehicle().getPosition();
-        const playerDirection = this.sim.getPlayerVehicle().getDirection()
-            .clone()
-            .setY(0)
-            .normalize();
-        const cameraOffset = playerDirection.multiplyScalar(
-            CAMERA_FOLLOW_DISTANCE,
-        );
-        cameraOffset.y = CAMERA_FOLLOW_HEIGHT;
-
-        this.cam.position.copy(playerPosition).add(cameraOffset);
-        this.cam.lookAt(playerPosition);
+        this.cameraYaw = Math.atan2(playerDirection.x, playerDirection.z);
+        this.cameraPitchOffset = 0;
+        this.updateCamera();
     }
 
     handleResize(): void {
@@ -627,9 +619,10 @@ export class ThreeJsEngine {
         this.renderer.setSize(width, height, false);
     }
 
-    render(deltaTime: number): void {
+    render(deltaTime: number, lookDelta: Vector2): void {
         this.syncSceneObjects();
         const effectEvents = this.sim.drainVisualEffectEvents();
+        const cameraSettings = CameraTuning.getSettings();
 
         for (let i = 0; i < effectEvents.length; i += 1) {
             this.effectSystem.spawn(effectEvents[i]);
@@ -688,18 +681,15 @@ export class ThreeJsEngine {
             );
         }
 
-        const playerVehicle = this.sim.getPlayerVehicle();
-        const playerPosition = playerVehicle.getPosition().clone().add(
-            new Vector3(0, 2, 0),
+        this.cameraYaw -= lookDelta.x * cameraSettings.rotateSensitivity;
+        const basePitch = this.getBasePitch(cameraSettings);
+        const nextPitch = this.getClampedPitch(
+            basePitch + this.cameraPitchOffset -
+                lookDelta.y * cameraSettings.tiltSensitivity,
         );
-        const playerDirection = playerVehicle.getDirection();
 
-        const cameraOffset = playerDirection.clone().setY(0).normalize()
-            .multiplyScalar(CAMERA_FOLLOW_DISTANCE);
-        cameraOffset.y = CAMERA_FOLLOW_HEIGHT;
-
-        this.cam.position.copy(playerPosition).add(cameraOffset);
-        this.cam.lookAt(playerPosition);
+        this.cameraPitchOffset = nextPitch - basePitch;
+        this.updateCamera();
         this.hudOverlaySystem.update(this.sim.aiVehicles, this.cam);
         this.renderer.render(this.scene, this.cam);
     }
@@ -709,6 +699,58 @@ export class ThreeJsEngine {
         this.hudOverlaySystem.dispose();
         this.renderer.dispose();
     }
+
+    private updateCamera(): void {
+        const cameraSettings = CameraTuning.getSettings();
+        const playerPosition = this.sim.getPlayerVehicle().getPosition().clone();
+        const horizontalFollowDistance = Math.max(0.01, cameraSettings.distanceBack);
+        const cameraPitch = this.getClampedPitch(
+            this.getBasePitch(cameraSettings) + this.cameraPitchOffset,
+        );
+        const orbitOffset = new Vector3(
+            Math.sin(this.cameraYaw) * horizontalFollowDistance,
+            cameraSettings.height,
+            Math.cos(this.cameraYaw) * horizontalFollowDistance,
+        );
+        const cosPitch = Math.cos(cameraPitch);
+        const lookDirection = new Vector3(
+            -Math.sin(this.cameraYaw) * cosPitch,
+            Math.sin(cameraPitch),
+            -Math.cos(this.cameraYaw) * cosPitch,
+        );
+        const lookTarget = playerPosition.clone();
+
+        this.cam.position.copy(playerPosition).add(orbitOffset);
+        lookTarget.copy(this.cam.position).add(
+            lookDirection.multiplyScalar(CAMERA_LOOK_DISTANCE),
+        );
+        if (this.cam.fov !== cameraSettings.fov) {
+            this.cam.fov = cameraSettings.fov;
+            this.cam.updateProjectionMatrix();
+        }
+        this.cam.lookAt(lookTarget);
+    }
+
+    private getBasePitch(
+        cameraSettings: ReturnType<typeof CameraTuning.getSettings>,
+    ): number {
+        return Math.atan2(
+            cameraSettings.aimHeight - cameraSettings.height,
+            Math.max(0.01, cameraSettings.distanceBack),
+        );
+    }
+
+    private getClampedPitch(pitch: number): number {
+        const cameraSettings = CameraTuning.getSettings();
+        const lowPitch = toRadians(cameraSettings.lowTiltLimitDeg);
+        const highPitch = toRadians(cameraSettings.highTiltLimitDeg);
+
+        return Math.min(highPitch, Math.max(lowPitch, pitch));
+    }
+}
+
+function toRadians(value: number): number {
+    return value * (Math.PI / 180);
 }
 
 function createGroundTexture(): DataTexture {

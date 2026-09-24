@@ -58,6 +58,10 @@ class GlobalOptionsPanelSingleton {
         this.root?.classList.add("debug-panel-hidden");
     }
 
+    isOpen(): boolean {
+        return this.isVisible;
+    }
+
     private readonly handleSliderInput = (): void => {
         if (!this.slider) {
             return;
