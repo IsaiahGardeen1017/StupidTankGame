@@ -4,7 +4,10 @@ import {
     Color,
     DataTexture,
     DirectionalLight,
+    Fog,
     Group,
+    IcosahedronGeometry,
+    InstancedMesh,
     Material,
     Matrix4,
     Mesh,
@@ -46,8 +49,9 @@ import {
 } from "./presets/vehicles";
 import { randInt } from "./utils";
 import { hashFromColor, rgb, rgbFromColor } from "./utils_color";
+import { DebugHitboxRenderer } from "./DebugHitboxRenderer";
+import { GlobalDebugScreen } from "./GlobalDebugScreen";
 
-const GROUND_SIZE = 1000;
 const MIN_DIRECTION_LENGTH_SQUARED = 0.0001;
 const DESTROYED_VEHICLE_COLOR = new Color("#1b1a18");
 const VEHICLE_MODEL_FORWARD_ALIGNMENT_Y = Math.PI;
@@ -90,9 +94,10 @@ export class ThreeJsEngine {
     private readonly sim: Simulation;
     private readonly renderer: WebGLRenderer;
     private readonly scene = new Scene();
-    private readonly cam = new PerspectiveCamera(60, 1, 0.1, 2500);
+    private readonly cam = new PerspectiveCamera(60, 1, 0.1, 6000);
     private readonly effectSystem: EffectSystem;
     private readonly hudOverlaySystem: HudOverlaySystem;
+    private readonly debugHitboxRenderer: DebugHitboxRenderer;
     private readonly vehicleGroups = new Map<string, VehicleRenderState>();
     private readonly projectileMeshes = new Map<
         string,
@@ -117,6 +122,7 @@ export class ThreeJsEngine {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.effectSystem = new EffectSystem(this.scene);
         this.hudOverlaySystem = new HudOverlaySystem(hudContainer, this.canvas);
+        this.debugHitboxRenderer = new DebugHitboxRenderer(this.scene);
         this.getOrCreateVehicleGroup(this.sim.getPlayerVehicle());
         this.setupScene();
     }
@@ -588,6 +594,7 @@ export class ThreeJsEngine {
 
     private setupScene(): void {
         this.scene.background = new Color("#8ec9ff");
+        this.scene.fog = new Fog("#8ec9ff", 1800, 5200);
         const ambientLight = new AmbientLight("#ffffff", 2.1);
         this.scene.add(ambientLight);
 
@@ -595,12 +602,8 @@ export class ThreeJsEngine {
         sunLight.position.set(180, 260, 120);
         this.scene.add(sunLight);
 
-        const ground = new Mesh(
-            new PlaneGeometry(GROUND_SIZE, GROUND_SIZE, 1, 1),
-            new MeshStandardMaterial({ map: createGroundTexture() }),
-        );
-        ground.rotation.x = -Math.PI / 2;
-        this.scene.add(ground);
+        this.createTerrainMeshes();
+        this.createBoulderMeshes();
 
         this.syncSceneObjects();
         const playerDirection = this.sim.getPlayerVehicle().getDirection();
@@ -634,10 +637,13 @@ export class ThreeJsEngine {
         for (let i = 0; i < entities.length; i += 1) {
             const entity = entities[i];
             const entityGroup = this.getOrCreateVehicleGroup(entity);
+            const groundNormal = entity.getGroundNormal();
             const entityPosition = entity.getPosition().clone().add(
-                new Vector3(0, 2, 0),
+                groundNormal.clone().multiplyScalar(2),
             );
-            const entityDirection = entity.getDirection();
+            const entityDirection = entity.getDirection().clone()
+                .projectOnPlane(groundNormal)
+                .normalize();
 
             entityGroup.root.position.copy(entityPosition);
 
@@ -663,10 +669,16 @@ export class ThreeJsEngine {
             }
 
             if (entityDirection.lengthSq() > MIN_DIRECTION_LENGTH_SQUARED) {
-                entityGroup.root.rotation.y = Math.atan2(
-                    entityDirection.x,
-                    entityDirection.z,
+                const rightDirection = new Vector3().crossVectors(
+                    groundNormal,
+                    entityDirection,
+                ).normalize();
+                const rotationMatrix = new Matrix4().makeBasis(
+                    rightDirection,
+                    groundNormal,
+                    entityDirection,
                 );
+                entityGroup.root.quaternion.setFromRotationMatrix(rotationMatrix);
             }
         }
 
@@ -691,12 +703,18 @@ export class ThreeJsEngine {
         this.cameraPitchOffset = nextPitch - basePitch;
         this.updateCamera();
         this.hudOverlaySystem.update(this.sim.aiVehicles, this.cam);
+        const isDebugOpen = GlobalDebugScreen.isOpen();
+        this.debugHitboxRenderer.update(
+            isDebugOpen ? this.sim.hitboxRegistry.getHitboxes() : [],
+            isDebugOpen,
+        );
         this.renderer.render(this.scene, this.cam);
     }
 
     dispose(): void {
         this.effectSystem.dispose();
         this.hudOverlaySystem.dispose();
+        this.debugHitboxRenderer.dispose();
         this.renderer.dispose();
     }
 
@@ -721,6 +739,10 @@ export class ThreeJsEngine {
         const lookTarget = playerPosition.clone();
 
         this.cam.position.copy(playerPosition).add(orbitOffset);
+        this.cam.position.y = Math.max(
+            this.cam.position.y,
+            this.sim.terrain.getHeightAt(this.cam.position.x, this.cam.position.z) + 3,
+        );
         lookTarget.copy(this.cam.position).add(
             lookDirection.multiplyScalar(CAMERA_LOOK_DISTANCE),
         );
@@ -729,6 +751,89 @@ export class ThreeJsEngine {
             this.cam.updateProjectionMatrix();
         }
         this.cam.lookAt(lookTarget);
+    }
+
+    private createTerrainMeshes(): void {
+        const settings = this.sim.terrain.settings;
+        const chunkSize = settings.size / settings.chunkCount;
+        const groundMaterial = new MeshStandardMaterial({
+            map: createGroundTexture(),
+            roughness: 0.95,
+        });
+
+        for (let chunkZ = 0; chunkZ < settings.chunkCount; chunkZ += 1) {
+            for (let chunkX = 0; chunkX < settings.chunkCount; chunkX += 1) {
+                const geometry = new PlaneGeometry(
+                    chunkSize,
+                    chunkSize,
+                    settings.chunkSegments,
+                    settings.chunkSegments,
+                );
+                geometry.rotateX(-Math.PI / 2);
+                const centerX = -settings.size / 2 + chunkSize * (chunkX + 0.5);
+                const centerZ = -settings.size / 2 + chunkSize * (chunkZ + 0.5);
+                const positions = geometry.attributes.position;
+
+                for (let index = 0; index < positions.count; index += 1) {
+                    const worldX = centerX + positions.getX(index);
+                    const worldZ = centerZ + positions.getZ(index);
+                    positions.setY(index, this.sim.terrain.getHeightAt(worldX, worldZ));
+                }
+                positions.needsUpdate = true;
+                geometry.computeVertexNormals();
+
+                const chunk = new Mesh(geometry, groundMaterial);
+                chunk.position.set(centerX, 0, centerZ);
+                this.scene.add(chunk);
+            }
+        }
+    }
+
+    private createBoulderMeshes(): void {
+        const boulders = this.sim.terrain.boulders;
+        if (boulders.length === 0) return;
+
+        const geometry = new IcosahedronGeometry(1, 1);
+        const positions = geometry.attributes.position;
+        for (let index = 0; index < positions.count; index += 1) {
+            const x = positions.getX(index);
+            const y = positions.getY(index);
+            const z = positions.getZ(index);
+            const vertexSeed = Math.round(x * 1000) * 17 +
+                Math.round(y * 1000) * 31 + Math.round(z * 1000) * 47;
+            const variation = 0.82 + pseudoRandom(vertexSeed) * 0.32;
+            positions.setXYZ(
+                index,
+                x * variation,
+                y * variation,
+                z * variation,
+            );
+        }
+        positions.needsUpdate = true;
+        geometry.computeVertexNormals();
+
+        const material = new MeshStandardMaterial({
+            color: "#6d6558",
+            roughness: 1,
+        });
+        const instances = new InstancedMesh(geometry, material, boulders.length);
+        const transform = new Object3D();
+
+        for (let index = 0; index < boulders.length; index += 1) {
+            const boulder = boulders[index];
+            transform.position.copy(boulder.position);
+            transform.position.y += boulder.height * 0.38;
+            transform.rotation.set(
+                pseudoRandom(index + 11) * 0.35,
+                boulder.rotation,
+                pseudoRandom(index + 47) * 0.35,
+            );
+            transform.scale.set(boulder.radius, boulder.height, boulder.radius);
+            transform.updateMatrix();
+            instances.setMatrixAt(index, transform.matrix);
+        }
+        instances.instanceMatrix.needsUpdate = true;
+        this.scene.add(instances);
     }
 
     private getBasePitch(
@@ -753,12 +858,17 @@ function toRadians(value: number): number {
     return value * (Math.PI / 180);
 }
 
+function pseudoRandom(seed: number): number {
+    const value = Math.sin(seed * 12.9898) * 43_758.5453;
+    return value - Math.floor(value);
+}
+
 function createGroundTexture(): DataTexture {
     const tileSize = 64;
     const pixels = new Uint8Array(tileSize * tileSize * 4);
 
-    const baseColor = rgbFromColor("#6e531d");
-    const variance = 5;
+    const baseColor = rgbFromColor("#426b2f");
+    const variance = 9;
     const pixelationScale = 8;
 
     const getVarient = () => {

@@ -10,6 +10,7 @@ export class GameApp {
     readonly sim = new Simulation();
 
     private animationFrameId: number | null = null;
+    private simulationAccumulator = 0;
 
     constructor(canvas: HTMLCanvasElement, hudContainer: HTMLElement) {
         this.input = new InputController(canvas);
@@ -39,14 +40,24 @@ export class GameApp {
     };
 
     private readonly renderFrame = (): void => {
-        const deltaTime = this.clock.getDelta();
+        const deltaTime = Math.min(this.clock.getDelta(), 0.1);
 
         this.sim.setPlayerInput(
             this.input.getMovementAxes(),
             this.input.getRotationAxes(),
             this.input.isPrimaryFirePressed(),
         );
-        this.sim.tick(deltaTime);
+        const fixedTimeStep = 1 / 60;
+        this.simulationAccumulator += deltaTime;
+        let steps = 0;
+        while (this.simulationAccumulator >= fixedTimeStep && steps < 6) {
+            this.sim.tick(fixedTimeStep);
+            this.simulationAccumulator -= fixedTimeStep;
+            steps += 1;
+        }
+        if (steps === 6) {
+            this.simulationAccumulator = 0;
+        }
         this.threeEngine.render(deltaTime, this.input.consumeLookDelta());
 
         this.animationFrameId = window.requestAnimationFrame(this.renderFrame);

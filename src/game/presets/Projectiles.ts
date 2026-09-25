@@ -64,7 +64,7 @@ export function createProjectile(
     params: ProjectileSpawnParams,
 ): ProjectileState {
     const def = ProjectileTypeDefs[params.typeId];
-    const shotDirection = params.direction.clone().setY(0).normalize();
+    const shotDirection = params.direction.clone().normalize();
     const inheritedVelocity = params.inheritedVelocity?.clone() ??
         new Vector3(0, 0, 0);
 

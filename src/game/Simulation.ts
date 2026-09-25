@@ -8,10 +8,14 @@ import {
     type ProjectileState,
     ProjectileTypeDefs,
 } from "./presets/Projectiles";
-import { distanceSqFromPointToSegment2D, randInt } from "./utils";
+import { randInt } from "./utils";
+import { Terrain } from "./Terrain";
+import { HitboxRegistry } from "./HitboxRegistry";
 
 export class Simulation {
     private readonly playerVehicle: HoverGroundVehicle;
+    readonly terrain: Terrain;
+    readonly hitboxRegistry = new HitboxRegistry();
 
     size: number;
 
@@ -20,14 +24,15 @@ export class Simulation {
     private readonly projectiles: ProjectileState[];
     private readonly visualEffectEvents: VisualEffectSpawnEvent[];
 
-    constructor(size: number = 1000) {
+    constructor() {
+        this.terrain = new Terrain();
         this.playerVehicle = new HoverGroundVehicle(
             "player",
             cloneTankStats,
             this,
         );
 
-        this.size = size;
+        this.size = this.terrain.settings.size;
         this.aiVehicles = [];
         this.projectiles = [];
         this.visualEffectEvents = [];
@@ -41,6 +46,8 @@ export class Simulation {
                 ),
             );
         }
+
+        this.registerDebugHitboxes();
     }
 
     tick(deltaT: number): void {
@@ -102,7 +109,25 @@ export class Simulation {
             );
             projectile.lifeRemaining -= deltaT;
 
+            const terrainHit = this.findTerrainHit(
+                projectile.previousPosition,
+                projectile.position,
+            );
+            if (terrainHit) {
+                projectile.position.copy(terrainHit);
+            }
+
             if (this.resolveProjectileHit(projectile, projectileDef.damage)) {
+                this.projectiles.splice(i, 1);
+                continue;
+            }
+
+            if (this.resolveProjectileBoulderHit(projectile) || terrainHit) {
+                this.visualEffectEvents.push({
+                    effectId: projectileDef.hitEffectId,
+                    position: projectile.position.clone(),
+                    direction: projectile.velocity.clone().normalize(),
+                });
                 this.projectiles.splice(i, 1);
                 continue;
             }
@@ -117,18 +142,115 @@ export class Simulation {
         }
     }
 
+    private registerDebugHitboxes(): void {
+        this.hitboxRegistry.registerSource("vehicles", () =>
+            this.getVehicleList().map((vehicle) => {
+                const radius = vehicle.getCollisionRadius();
+                const center = vehicle.getPosition().clone();
+                center.y += radius * 0.35;
+                return {
+                    id: `vehicle:${vehicle.id}`,
+                    center,
+                    size: new Vector3(radius * 2, radius * 2, radius * 2),
+                    color: "#00e5ff",
+                };
+            })
+        );
+        this.hitboxRegistry.registerSource("boulders", () =>
+            this.terrain.boulders.map((boulder, index) => {
+                const collisionRadius = Math.max(
+                    boulder.radius,
+                    boulder.height * 0.45,
+                );
+                const center = boulder.position.clone();
+                center.y += boulder.height * 0.4;
+                return {
+                    id: `boulder:${index}`,
+                    center,
+                    size: new Vector3(
+                        collisionRadius * 2,
+                        collisionRadius * 2,
+                        collisionRadius * 2,
+                    ),
+                    color: "#ffad33",
+                };
+            })
+        );
+        this.hitboxRegistry.registerSource("projectiles", () =>
+            this.projectiles.map((projectile) => {
+                const radius = ProjectileTypeDefs[projectile.typeId].radius;
+                return {
+                    id: `projectile:${projectile.id}`,
+                    center: projectile.position.clone(),
+                    size: new Vector3(radius * 2, radius * 2, radius * 2),
+                    color: "#ff335f",
+                };
+            })
+        );
+    }
+
+    resolveVehicleBoulderCollisions(
+        position: Vector3,
+        velocity: Vector3,
+        vehicleRadius: number,
+    ): void {
+        for (const boulder of this.terrain.boulders) {
+            const offsetX = position.x - boulder.position.x;
+            const offsetZ = position.z - boulder.position.z;
+            const distance = Math.hypot(offsetX, offsetZ);
+            const minimumDistance = vehicleRadius + boulder.radius;
+            if (distance >= minimumDistance) continue;
+
+            const normalX = distance > 0.001 ? offsetX / distance : 1;
+            const normalZ = distance > 0.001 ? offsetZ / distance : 0;
+            position.x += normalX * (minimumDistance - distance);
+            position.z += normalZ * (minimumDistance - distance);
+
+            const inwardSpeed = velocity.x * normalX + velocity.z * normalZ;
+            if (inwardSpeed < 0) {
+                velocity.x -= normalX * inwardSpeed * 1.15;
+                velocity.z -= normalZ * inwardSpeed * 1.15;
+            }
+        }
+    }
+
+    private findTerrainHit(start: Vector3, end: Vector3): Vector3 | null {
+        const distance = start.distanceTo(end);
+        const steps = Math.max(1, Math.min(128, Math.ceil(distance / 4)));
+        const sample = new Vector3();
+
+        for (let step = 1; step <= steps; step += 1) {
+            sample.lerpVectors(start, end, step / steps);
+            const terrainHeight = this.terrain.getHeightAt(sample.x, sample.z);
+            if (sample.y <= terrainHeight) {
+                sample.y = terrainHeight;
+                return sample.clone();
+            }
+        }
+        return null;
+    }
+
+    private resolveProjectileBoulderHit(projectile: ProjectileState): boolean {
+        for (const boulder of this.terrain.boulders) {
+            const center = boulder.position.clone();
+            center.y += boulder.height * 0.4;
+            const radius = Math.max(boulder.radius, boulder.height * 0.45) +
+                ProjectileTypeDefs[projectile.typeId].radius;
+            if (
+                distanceSqFromPointToSegment3D(
+                    center,
+                    projectile.previousPosition,
+                    projectile.position,
+                ) <= radius * radius
+            ) return true;
+        }
+        return false;
+    }
+
     private resolveProjectileHit(
         projectile: ProjectileState,
         damage: number,
     ): boolean {
-        const shotStart = new Vector2(
-            projectile.previousPosition.x,
-            projectile.previousPosition.z,
-        );
-        const shotEnd = new Vector2(
-            projectile.position.x,
-            projectile.position.z,
-        );
         const projectileRadius = ProjectileTypeDefs[projectile.typeId].radius;
         const vehicles = this.getVehicleList();
 
@@ -140,15 +262,13 @@ export class Simulation {
             }
 
             const vehiclePosition = vehicle.getPosition();
-            const vehicleCenter = new Vector2(
-                vehiclePosition.x,
-                vehiclePosition.z,
-            );
+            const vehicleCenter = vehiclePosition.clone();
+            vehicleCenter.y += vehicle.getCollisionRadius() * 0.35;
             const hitRadius = projectileRadius + vehicle.getCollisionRadius();
-            const distanceSq = distanceSqFromPointToSegment2D(
+            const distanceSq = distanceSqFromPointToSegment3D(
                 vehicleCenter,
-                shotStart,
-                shotEnd,
+                projectile.previousPosition,
+                projectile.position,
             );
 
             if (distanceSq > hitRadius * hitRadius) {
@@ -185,4 +305,24 @@ export class Simulation {
 
         return false;
     }
+}
+
+function distanceSqFromPointToSegment3D(
+    point: Vector3,
+    segmentStart: Vector3,
+    segmentEnd: Vector3,
+): number {
+    const segment = segmentEnd.clone().sub(segmentStart);
+    const lengthSq = segment.lengthSq();
+    if (lengthSq <= Number.EPSILON) {
+        return point.distanceToSquared(segmentStart);
+    }
+
+    const amount = Math.max(0, Math.min(
+        1,
+        point.clone().sub(segmentStart).dot(segment) / lengthSq,
+    ));
+    return point.distanceToSquared(
+        segmentStart.clone().add(segment.multiplyScalar(amount)),
+    );
 }

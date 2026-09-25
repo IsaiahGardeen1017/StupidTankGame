@@ -7,6 +7,8 @@ import type { Simulation } from "../Simulation";
 import type { ProjectileHit } from "../presets/Projectiles";
 import { type BlasterIds, BLASTERS } from "../presets/blasters";
 
+const GRAVITY_METERS_PER_SECOND_SQUARED = 9.81;
+
 export type HudDisplayInfo = {
     name: string;
     health: {
@@ -74,6 +76,10 @@ export class HoverGroundVehicle {
         this._yawInput = 0;
         this._yawAngularVelocity = 0;
         this._position = position ? position : new Vector3(0, 0, 0);
+        this._position.y = this._sim.terrain.getHeightAt(
+            this._position.x,
+            this._position.z,
+        );
         this._direction = new Vector3(0, 0, 1);
         this._health = stats.maxHealth;
         this._isPrimaryFireRequested = false;
@@ -102,15 +108,21 @@ export class HoverGroundVehicle {
         }
 
         //Calculate Forces
-        const forwardDirection = this._direction.clone().setY(0).normalize();
+        const terrainNormal = this._sim.terrain.getNormalAt(
+            this._position.x,
+            this._position.z,
+        );
+        const forwardDirection = this._direction.clone()
+            .projectOnPlane(terrainNormal)
+            .normalize();
         const rightDirection = new Vector3().crossVectors(
-            new Vector3(0, 1, 0),
+            terrainNormal,
             forwardDirection,
         ).normalize();
-        const inputThrust3D = rightDirection.multiplyScalar(
+        const inputThrust3D = rightDirection.clone().multiplyScalar(
             this._positionInputVector.x,
         ).add(
-            forwardDirection.multiplyScalar(-this._positionInputVector.y),
+            forwardDirection.clone().multiplyScalar(-this._positionInputVector.y),
         ).multiplyScalar(this.stats.repulserThrustNewtons);
         const frictionMagnitude = (this._velocity.length()) *
             this.stats.linearFrictionFactor;
@@ -118,7 +130,12 @@ export class HoverGroundVehicle {
         const frictionVector = frictionDirection.multiplyScalar(
             frictionMagnitude,
         );
-        const totalForces: Vector3 = inputThrust3D.add(frictionVector);
+        const gravityForce = new Vector3(0, -GRAVITY_METERS_PER_SECOND_SQUARED, 0)
+            .multiplyScalar(this.stats.weightKg)
+            .projectOnPlane(terrainNormal);
+        const totalForces: Vector3 = inputThrust3D
+            .add(frictionVector)
+            .add(gravityForce);
 
         //Update position
         const acceleration = totalForces.divideScalar(this.stats.weightKg);
@@ -126,6 +143,21 @@ export class HoverGroundVehicle {
         this._position.add(
             this._velocity.clone().multiplyScalar(deltaT),
         );
+        this._sim.terrain.clampToBounds(this._position, this.stats.collisionRadius);
+        this._sim.resolveVehicleBoulderCollisions(
+            this._position,
+            this._velocity,
+            this.stats.collisionRadius,
+        );
+        this._position.y = this._sim.terrain.getHeightAt(
+            this._position.x,
+            this._position.z,
+        );
+        const nextTerrainNormal = this._sim.terrain.getNormalAt(
+            this._position.x,
+            this._position.z,
+        );
+        this._velocity.projectOnPlane(nextTerrainNormal);
 
         //Alter Rotation
         const rotationalAcceleration = this._yawInput *
@@ -135,8 +167,9 @@ export class HoverGroundVehicle {
         this._yawAngularVelocity +=
             (rotationalAcceleration - rotationFriction) * deltaT;
         const yawDelta = this._yawAngularVelocity * deltaT;
-        this._direction.applyAxisAngle(new Vector3(0, 1, 0), yawDelta)
-            .setY(0)
+        this._direction.copy(forwardDirection)
+            .applyAxisAngle(nextTerrainNormal, yawDelta)
+            .projectOnPlane(nextTerrainNormal)
             .normalize();
 
         if (this._isPrimaryFireRequested) {
@@ -150,6 +183,10 @@ export class HoverGroundVehicle {
 
     getDirection(): Vector3 {
         return this._direction;
+    }
+
+    getGroundNormal(): Vector3 {
+        return this._sim.terrain.getNormalAt(this._position.x, this._position.z);
     }
 
     getCollisionRadius(): number {
@@ -183,14 +220,18 @@ export class HoverGroundVehicle {
             return false;
         }
 
-        const shotDirection = this._direction.clone().setY(0).normalize()
+        const shotDirection = this._direction.clone().normalize()
             .negate();
         const muzzlePosition = this._position.clone().add(
             shotDirection.clone().multiplyScalar(
                 this.stats.collisionRadius + 0.9,
             ),
         );
-        muzzlePosition.y = Math.max(muzzlePosition.y, 1.5);
+        muzzlePosition.add(
+            this.getGroundNormal().multiplyScalar(
+                this.stats.collisionRadius * 0.35 + 1.5,
+            ),
+        );
 
         this._sim.registerProjectile({
             typeId: weaponTypeId,
